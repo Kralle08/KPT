@@ -40,7 +40,7 @@ export function plan(mode, { meal, rsvps, members }) {
     const late = yes.filter(r => r.late && !cooks.includes(r.user_id)).map(r => name(r.user_id) + (r.guests ? ` (+${r.guests})` : ""));
     return cooks.filter(id => active.some(m => m.id === id)).map(id => ({
       user_id: id, tag: "kpt-endstand", title: `KPT: Endstand für Freitag: ${total} ${total === 1 ? "Portion" : "Portionen"}`,
-      body: late.length ? `Nach Mittwoch dazugekommen: ${late.join(", ")}. Die Anmeldung ist jetzt geschlossen.` : "Seit Mittwoch hat sich nichts geändert. Die Anmeldung ist jetzt geschlossen."
+      body: late.length ? `Nach Mittwoch dazugekommen: ${late.join(", ")}. Die Anmeldung ist geschlossen, nur die Zahl der Gäste lässt sich noch bis Freitag 12 Uhr ändern.` : "Seit Mittwoch hat sich nichts geändert. Die Anmeldung ist geschlossen, nur die Zahl der Gäste lässt sich noch bis Freitag 12 Uhr ändern."
     }));
   }
   return [];

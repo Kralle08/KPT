@@ -228,7 +228,7 @@ form.senden button{width:46px;height:46px;border-radius:50%;background:var(--sen
 <script>
 "use strict";
 /* ============================================================
-   KPT – Kulinarisches Projekt TEam
+   KPT – Kulinarisches Projekt Team
    Eine Datei: Oberfläche, Demo-Daten und Anbindung an Supabase.
    ============================================================ */
 
@@ -246,6 +246,8 @@ const today = () => iso(new Date());
 const nextFriday = (from = today()) => addDays(from, (5 - parse(from).getDay() + 7) % 7);
 const softOpen = day => new Date() < parse(addDays(day, -1));           // Frist: Mittwoch 23:59
 const rsvpOpen = day => new Date() < new Date(parse(addDays(day, -1)).getTime() + 18 * 3600e3);   // Nachmelden bis Donnerstag 18 Uhr
+const guestsOpen = day => new Date() < new Date(parse(day).getTime() + 12 * 3600e3);                // Gäste ändern bis Freitag 12 Uhr
+const rateOpen = day => new Date() >= new Date(parse(day).getTime() + 12.5 * 3600e3);               // Bewerten ab Freitag 12:30 Uhr
 const fmt = (day, o) => parse(day).toLocaleDateString("de-DE", o);
 const fmtLong = day => fmt(day, { weekday: "long", day: "numeric", month: "long" });
 const fmtFrist = day => fmt(addDays(day, -2), { day: "numeric", month: "numeric" });
@@ -284,7 +286,7 @@ const myRsvp = day => S.rsvps.find(r => r.day === day && r.user_id === S.me.id);
 const ratingsOf = day => S.ratings.filter(r => r.day === day);
 const avg = list => list.length ? list.reduce((s, r) => s + r.spoons, 0) / list.length : 0;
 const photosOf = day => S.photos.filter(p => p.day === day);
-const mayRate = m => m && m.day <= today() && !isCook(m) && myRsvp(m.day)?.coming;
+const mayRate = m => m && rateOpen(m.day) && !isCook(m) && myRsvp(m.day)?.coming;
 const activeMembers = () => S.members.filter(m => m.active);
 const portionsOf = r => 1 + (r.guests || 0);
 const portions = day => rsvpsOf(day).filter(r => r.coming).reduce((n, r) => n + portionsOf(r), 0);
@@ -395,10 +397,14 @@ function demoBackend() {
     },
     async saveMeal(day, f) { Object.assign(db.meals.find(x => x.day === day), f); },
     async setRsvp(day, coming, guests = 0, force) {
-      if (!force && !rsvpOpen(day)) throw new Error("Die Anmeldung ist geschlossen.");
-      const r = db.rsvps.find(x => x.day === day && x.user_id === "me");
-      if (!force && !softOpen(day) && r?.coming && (!coming || guests < (r.guests || 0))) throw new Error("Nach Mittwoch geht nur noch Nachmelden, Absagen nicht mehr.");
-      if (r) Object.assign(r, { coming, guests, late: !softOpen(day) }); else db.rsvps.push({ day, user_id: "me", coming, guests, late: !softOpen(day) });
+      const r = db.rsvps.find(x => x.day === day && x.user_id === "me"), zu = new Error("Die Anmeldung ist geschlossen.");
+      if (!force && !r && !rsvpOpen(day)) throw zu;
+      if (!force && r && !softOpen(day)) {
+        if (r.coming && !coming) throw new Error("Nach Mittwoch geht nur noch Nachmelden, Absagen nicht mehr.");
+        if ((coming !== r.coming && !rsvpOpen(day)) || !guestsOpen(day)) throw zu;
+      }
+      const late = softOpen(day) ? false : !r || r.late || coming !== r.coming || guests > (r.guests || 0);
+      if (r) Object.assign(r, { coming, guests, late }); else db.rsvps.push({ day, user_id: "me", coming, guests, late });
     },
     async addPayment(from_user, to_user, amount) { db.payments.push({ id: ++pid, from_user, to_user, amount, created_by: "me", created_at: new Date().toISOString() }); },
     async deletePayment(id) { db.payments = db.payments.filter(p => p.id !== id); },
@@ -483,7 +489,14 @@ function liveBackend() {
     async claim(day) { ok(await sb.rpc("claim_friday", { d: day })); },
     async release(day, who) { ok(await sb.rpc("release_friday", who ? { d: day, who } : { d: day })); },
     async saveMeal(day, f) { ok(await sb.from("meals").update(f).eq("day", day)); },
-    async setRsvp(day, coming, guests = 0) { ok(await sb.from("rsvps").upsert({ day, user_id: uid, coming, guests }), "Die Anmeldung ist geschlossen."); },
+    async setRsvp(day, coming, guests = 0) {
+      const zu = "Die Anmeldung ist geschlossen.";
+      const change = async () => { if (!ok(await sb.from("rsvps").update({ coming, guests }).eq("day", day).eq("user_id", uid).select(), zu).length) throw new Error(zu); };
+      if (myRsvp(day)) return change();
+      const res = await sb.from("rsvps").insert({ day, user_id: uid, coming, guests });
+      if (res.error && /duplicate|23505/.test(`${res.error.code} ${res.error.message}`)) return change();
+      ok(res, zu);
+    },
     async addPayment(from_user, to_user, amount) { ok(await sb.from("payments").insert({ from_user, to_user, amount })); },
     async deletePayment(id) { ok(await sb.from("payments").delete().eq("id", id)); },
     async savePush(endpoint, p256dh, auth) { ok(await sb.rpc("save_push", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth })); },
@@ -523,7 +536,7 @@ function render() {
   const unread = S.messages.length && S.tab !== "chat" && String(S.messages.at(-1).id) !== store.get("kpt-gelesen") && S.messages.at(-1).user_id !== S.me.id;
   const mine = balances().get(S.me.id) || 0;
   root.innerHTML = `<div id="app">
-    <header class="top"><span class="logo">KPT</span><span class="sub">Kulinarisches Projekt TEam</span>
+    <header class="top"><span class="logo">KPT</span><span class="sub">Kulinarisches Projekt Team</span>
       <button class="pille ${mine < 0 ? "minus" : mine > 0 ? "plus" : ""}" data-act="kasse" aria-label="Clubkasse, dein Stand ${euro(mine)}">${mine ? euroPlus(mine) : "Kasse"}</button>
       <button data-act="profil" aria-label="Profil und Mitglieder">${avatar(S.me)}</button></header>
     ${B.demo ? '<div class="demo">Demo mit Beispieldaten – nichts wird gespeichert</div>' : ""}
@@ -536,7 +549,7 @@ const scrollChat = () => window.scrollTo(0, document.body.scrollHeight);
 
 // ---------- Anmelden / Beitreten ----------
 function viewGate() {
-  const kopf = `<h1>KPT</h1><p class="lang">Kulinarisches Projekt TEam.<br>Freitags wird gekocht.</p>`;
+  const kopf = `<h1>KPT</h1><p class="lang">Kulinarisches Projekt Team.<br>Freitags wird gekocht.</p>`;
   if (S.gate === "join") return `<div class="tor">${kopf}<form data-form="join"><h2>Dem Club beitreten</h2>
     <label class="feld">Dein Name, wie ihn die anderen sehen<input class="ein" name="name" required minlength="2" maxlength="40" autocomplete="name"></label>
     <label class="feld">Einladungscode<input class="ein" name="code" required autocapitalize="characters" autocomplete="off"></label>
@@ -555,7 +568,7 @@ function viewGate() {
 function rsvpBlock(day) {
   const m = meal(day), list = rsvpsOf(day), yes = list.filter(r => r.coming), no = list.filter(r => !r.coming);
   const offen = activeMembers().filter(x => !list.some(r => r.user_id === x.id));
-  const mine = myRsvp(day), open = rsvpOpen(day), soft = softOpen(day), cook = isCook(m);
+  const mine = myRsvp(day), open = rsvpOpen(day), soft = softOpen(day), gOpen = guestsOpen(day), cook = isCook(m);
   const names = l => l.map(r => esc(member(r.user_id ?? r.id).name) + (r.guests || r.late ? ` (${[r.guests ? "+" + r.guests : "", r.late ? "nach Mittwoch" : ""].filter(Boolean).join(", ")})` : "")).join(", ") || "–";
   const P = portions(day), G = P - yes.length, g = mine?.coming ? mine.guests || 0 : 0;
   return `<div class="zahl"><b>${P}</b><span>${P === 1 ? "Portion" : "Portionen"}<br>${yes.length} ${yes.length === 1 ? "Mitglied" : "Mitglieder"}${G ? `, ${G} ${G === 1 ? "Gast" : "Gäste"}` : ""}${soft && offen.length ? `, ${offen.length} ohne Antwort` : ""}</span></div>
@@ -563,12 +576,12 @@ function rsvpBlock(day) {
       <button class="btn hell ja" data-act="rsvp" data-day="${day}" data-v="1" aria-pressed="${mine?.coming === true}">Ich esse mit</button>
       <button class="btn hell nein" data-act="rsvp" data-day="${day}" data-v="0" aria-pressed="${mine?.coming === false}">Ich bin raus</button></div>`
       : open && !mine?.coming ? `<div class="rsvp" style="grid-template-columns:1fr"><button class="btn senf" data-act="rsvp" data-day="${day}" data-v="1">Noch nachmelden</button></div>` : ""}
-    ${open && mine?.coming ? `<div class="gaeste"><span>${soft ? "Gäste mitbringen" : "Gäste nachmelden"}</span>
-      <button data-act="gast" data-day="${day}" data-d="-1" ${g && soft ? "" : "disabled"} aria-label="Ein Gast weniger">−</button><b aria-live="polite">${g}</b>
+    ${gOpen && mine?.coming ? `<div class="gaeste"><span>Gäste mitbringen</span>
+      <button data-act="gast" data-day="${day}" data-d="-1" ${g ? "" : "disabled"} aria-label="Ein Gast weniger">−</button><b aria-live="polite">${g}</b>
       <button data-act="gast" data-day="${day}" data-d="1" ${g < 5 ? "" : "disabled"} aria-label="Ein Gast mehr">+</button></div>` : ""}
     <p class="frist ${open ? "" : "dicht"}">${soft ? `An- und Abmelden bis Mittwoch, ${fmtFrist(day)}, 23:59 Uhr`
-      : open ? (mine?.coming && !cook ? "Du bist dabei. Absagen geht nach Mittwoch nicht mehr, Gäste nachmelden noch bis Donnerstag 18 Uhr." : cook ? "Nachmeldungen sind noch bis Donnerstag 18 Uhr möglich." : "Die Frist war Mittwoch. Nachmelden geht noch bis Donnerstag 18 Uhr.")
-      : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}`}</p>
+      : open ? (mine?.coming && !cook ? "Du bist dabei. Absagen geht nach Mittwoch nicht mehr. Die Zahl deiner Gäste kannst du bis Freitag 12 Uhr ändern." : cook ? "Nachmelden geht bis Donnerstag 18 Uhr, Gäste lassen sich bis Freitag 12 Uhr ändern." : "Die Frist war Mittwoch. Nachmelden geht noch bis Donnerstag 18 Uhr.")
+      : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}${gOpen && mine?.coming ? ". Die Zahl deiner Gäste kannst du noch bis Freitag 12 Uhr ändern." : ""}`}</p>
     <details class="wer"><summary>Wer kommt</summary><dl class="namen">
       <dt>Dabei (${yes.length})</dt><dd>${names(yes)}</dd><dt>Abgemeldet (${no.length})</dt><dd>${names(no)}</dd>
       ${open ? `<dt>Ohne Antwort (${offen.length})</dt><dd>${names(offen)}</dd>` : ""}</dl></details>`;
@@ -581,7 +594,7 @@ function viewStart() {
       <div class="koch">${cooks(m).map(id => avatar(member(id), "s")).join("")}<span>${esc(cookNames(m))} ${cooks(m).length > 1 ? "kochen" : "kocht"}</span></div>
       ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
       <hr class="riss">${rsvpBlock(day)}
-      <hr class="riss"><div class="reihe" style="margin-top:0"><button class="btn klein hell" data-act="open" data-day="${day}">${isCook(m) ? "Gericht und Rezept bearbeiten" : "Details, Rezept und Fotos"}</button></div>
+      <hr class="riss"><div class="reihe" style="margin-top:0"><button class="btn klein hell" data-act="open" data-day="${day}">${isCook(m) ? "Gericht und Rezept bearbeiten" : "Details, Rezept und Fotos"}</button>${!isCook(m) && !m.cook2 ? `<button class="btn klein hell" data-act="claim" data-day="${day}">Mitkochen</button>` : ""}</div>
     </section>` : `<section class="bon">${kopf}
       <h2>Der Herd ist noch frei</h2><p class="desc">Für diesen Freitag hat sich noch niemand zum Kochen eingetragen.</p>
       <hr class="riss"><button class="btn senf voll" data-act="claim" data-day="${day}">Ich koche am ${fmt(day, { day: "numeric", month: "numeric" })}</button></section>`;
@@ -713,7 +726,8 @@ function sheetMeal(day) {
   if (m.cost != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0"><b>${euro(cents(m.cost))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss am Donnerstagabend.`}</p></div>`;
   else if (cook && !softOpen(day)) h += `<div class="block"><h3>Einkauf</h3><p>Trag ein, was du ausgegeben hast. Die App verteilt den Betrag auf alle Portionen.</p><button class="btn klein senf" data-act="edit" data-v="1">Einkaufskosten eintragen</button></div>`;
   // Bewertung
-  if (day <= today()) {
+  if (!rateOpen(day) && day <= today()) h += `<div class="block"><h3>Bewertungen</h3><p style="color:var(--grau);margin:0">Bewerten geht heute ab 12:30 Uhr.</p></div>`;
+  if (rateOpen(day)) {
     h += `<div class="block"><h3>Bewertungen${rs.length ? ` (${rs.length})` : ""}</h3>`;
     if (mayRate(m)) {
       S.draft = S.draft || mine?.spoons || 0;
