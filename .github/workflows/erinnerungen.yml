@@ -1,0 +1,31 @@
+name: Erinnerungen
+
+on:
+  schedule:
+    - cron: "0 14 * * 3"
+    - cron: "0 6 * * 4"
+  workflow_dispatch:
+    inputs:
+      modus:
+        description: "Was soll verschickt werden?"
+        type: choice
+        default: test
+        options: [test, mittwoch, donnerstag]
+
+jobs:
+  senden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save web-push@3 @supabase/supabase-js@2
+      - run: node reminder.mjs
+        env:
+          MODUS: ${{ inputs.modus }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_CONTACT: ${{ secrets.VAPID_CONTACT }}
