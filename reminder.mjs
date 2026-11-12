@@ -1,36 +1,46 @@
 // KPT – verschickt die Push-Erinnerungen. Läuft automatisch über GitHub Actions
-// (.github/workflows/erinnerungen.yml): mittwochs nachmittags und donnerstags früh.
+// (.github/workflows/erinnerungen.yml): mittwochs nachmittags, donnerstags früh und donnerstags abends.
 //
 //   mittwoch    an alle, die sich für Freitag noch nicht an- oder abgemeldet haben
 //   donnerstag  an die Köche: für wie viele Portionen eingekauft wird
+//   donnerstagabend  an die Köche: Endstand nach den Nachmeldungen
 //   test        Probe-Mitteilung an alle Geräte mit eingeschalteter Erinnerung
 
 const berlin = (d = new Date()) => {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" }).formatToParts(d).map(x => [x.type, x.value]));
-  return { date: `${p.year}-${p.month}-${p.day}`, weekday: p.weekday };
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", hour12: false }).format(d));
+  return { date: `${p.year}-${p.month}-${p.day}`, weekday: p.weekday, hour };
 };
 const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export const nextFriday = iso => addDays(iso, (5 - new Date(iso + "T12:00:00Z").getUTCDay() + 7) % 7);
-export const modeFor = weekday => ({ Wed: "mittwoch", Thu: "donnerstag" }[weekday] || null);
+export const modeFor = (weekday, hour = 0) => weekday === "Wed" ? "mittwoch" : weekday === "Thu" ? (hour >= 12 ? "donnerstagabend" : "donnerstag") : null;
 
 // Reine Logik: wer bekommt welche Nachricht? (ohne Netz, damit sie sich testen lässt)
 export function plan(mode, { meal, rsvps, members }) {
   const active = members.filter(m => m.active), name = id => members.find(m => m.id === id)?.name || "jemand";
   if (mode === "test") return active.map(m => ({ user_id: m.id, title: "KPT: Probe-Erinnerung", body: "Die Erinnerungen funktionieren auf diesem Gerät.", tag: "kpt-test" }));
   if (!meal) return [];
-  const cooks = [meal.cook1, meal.cook2].filter(Boolean), wer = cooks.map(name).join(" & ");
+  const cooks = [meal.cook1, meal.cook2].filter(Boolean), koeche = cooks.map(name).join(" & ");
   if (mode === "mittwoch") {
     const answered = new Set(rsvps.map(r => r.user_id));
     return active.filter(m => !answered.has(m.id) && !cooks.includes(m.id)).map(m => ({
       user_id: m.id, tag: "kpt-anmeldung", title: "KPT: Isst du am Freitag mit?",
-      body: `${meal.title ? `Es gibt ${meal.title}, ` : ""}${wer} ${cooks.length > 1 ? "kochen" : "kocht"}. Bitte bis heute 23:59 Uhr an- oder abmelden.`
+      body: `${meal.title ? `Es gibt ${meal.title}, ` : ""}${koeche} ${cooks.length > 1 ? "kochen" : "kocht"}. Bitte bis heute 23:59 Uhr an- oder abmelden.`
     }));
   }
   if (mode === "donnerstag") {
     const yes = rsvps.filter(r => r.coming), guests = yes.reduce((n, r) => n + (r.guests || 0), 0), total = yes.length + guests;
     return cooks.filter(id => active.some(m => m.id === id)).map(id => ({
       user_id: id, tag: "kpt-einkauf", title: `KPT: Einkaufen für ${total} ${total === 1 ? "Portion" : "Portionen"}`,
-      body: `Für Freitag sind ${yes.length} ${yes.length === 1 ? "Mitglied" : "Mitglieder"}${guests ? ` und ${guests} ${guests === 1 ? "Gast" : "Gäste"}` : ""} angemeldet. Die Anmeldung ist geschlossen.`
+      body: `Für Freitag ${yes.length === 1 && !guests ? "ist" : "sind"} ${yes.length} ${yes.length === 1 ? "Mitglied" : "Mitglieder"}${guests ? ` und ${guests} ${guests === 1 ? "Gast" : "Gäste"}` : ""} angemeldet. Nachmelden geht noch bis heute 18 Uhr, den Endstand bekommst du heute Abend.`
+    }));
+  }
+  if (mode === "donnerstagabend") {
+    const yes = rsvps.filter(r => r.coming), total = yes.reduce((n, r) => n + 1 + (r.guests || 0), 0);
+    const late = yes.filter(r => r.late && !cooks.includes(r.user_id)).map(r => name(r.user_id) + (r.guests ? ` (+${r.guests})` : ""));
+    return cooks.filter(id => active.some(m => m.id === id)).map(id => ({
+      user_id: id, tag: "kpt-endstand", title: `KPT: Endstand für Freitag: ${total} ${total === 1 ? "Portion" : "Portionen"}`,
+      body: late.length ? `Nach Mittwoch dazugekommen: ${late.join(", ")}. Die Anmeldung ist jetzt geschlossen.` : "Seit Mittwoch hat sich nichts geändert. Die Anmeldung ist jetzt geschlossen."
     }));
   }
   return [];
@@ -41,7 +51,7 @@ async function main() {
   const missing = need.filter(k => !env[k]);
   if (missing.length) throw new Error("Es fehlen Einträge unter Settings → Secrets: " + missing.join(", "));
 
-  const now = berlin(), mode = (env.MODUS || "").trim() || modeFor(now.weekday);
+  const now = berlin(), mode = (env.MODUS || "").trim() || modeFor(now.weekday, now.hour);
   if (!mode) { console.log(`Heute (${now.weekday}) ist nichts zu tun.`); return; }
   const day = nextFriday(now.date);
   console.log(`Modus: ${mode}, Freitag: ${day}`);

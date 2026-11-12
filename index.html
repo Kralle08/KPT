@@ -244,7 +244,8 @@ const parse = s => { const [y, m, d] = s.split("-").map(Number); return new Date
 const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
 const today = () => iso(new Date());
 const nextFriday = (from = today()) => addDays(from, (5 - parse(from).getDay() + 7) % 7);
-const rsvpOpen = day => new Date() < parse(addDays(day, -1));           // bis Mittwoch 23:59
+const softOpen = day => new Date() < parse(addDays(day, -1));           // Frist: Mittwoch 23:59
+const rsvpOpen = day => new Date() < new Date(parse(addDays(day, -1)).getTime() + 18 * 3600e3);   // Nachmelden bis Donnerstag 18 Uhr
 const fmt = (day, o) => parse(day).toLocaleDateString("de-DE", o);
 const fmtLong = day => fmt(day, { weekday: "long", day: "numeric", month: "long" });
 const fmtFrist = day => fmt(addDays(day, -2), { day: "numeric", month: "numeric" });
@@ -360,7 +361,7 @@ function demoBackend() {
   db.meals.push({ day: nf, cook1: "m4", cook2: null, title: "Königsberger Klopse", description: "Mit Kapernsoße, Salzkartoffeln und Rote-Bete-Salat.", recipe: "" });
   db.meals.push({ day: addDays(nf, 14), cook1: "m7", cook2: null, title: "", description: "", recipe: "" });
   db.meals.push({ day: addDays(nf, 21), cook1: "m2", cook2: "m11", title: "Grünkohl mit Pinkel", description: "", recipe: "" });
-  members.forEach((m, i) => { if (m.id === "m4") db.rsvps.push({ day: nf, user_id: m.id, coming: true, guests: 0 }); else if (i && i < 11) db.rsvps.push({ day: nf, user_id: m.id, coming: i % 5 !== 0, guests: i === 3 ? 2 : 0 }); });
+  members.forEach((m, i) => { if (m.id === "m4") db.rsvps.push({ day: nf, user_id: m.id, coming: true, guests: 0 }); else if (i && i < 11) db.rsvps.push({ day: nf, user_id: m.id, coming: i % 5 !== 0, guests: i === 3 ? 2 : 0, late: i === 8 && !softOpen(nf) }); });
   db.payments.push({ id: 1, from_user: "me", to_user: "m1", amount: 20, created_by: "me", created_at: addDays(nf, -20) + "T12:00:00" },
                    { id: 2, from_user: "m5", to_user: "m4", amount: 12.5, created_by: "m4", created_at: addDays(nf, -9) + "T12:00:00" });
   const t = (d, h) => { const x = new Date(); x.setDate(x.getDate() - d); x.setHours(h, 12, 0, 0); return x.toISOString(); };
@@ -396,7 +397,8 @@ function demoBackend() {
     async setRsvp(day, coming, guests = 0, force) {
       if (!force && !rsvpOpen(day)) throw new Error("Die Anmeldung ist geschlossen.");
       const r = db.rsvps.find(x => x.day === day && x.user_id === "me");
-      if (r) Object.assign(r, { coming, guests }); else db.rsvps.push({ day, user_id: "me", coming, guests });
+      if (!force && !softOpen(day) && r?.coming && (!coming || guests < (r.guests || 0))) throw new Error("Nach Mittwoch geht nur noch Nachmelden, Absagen nicht mehr.");
+      if (r) Object.assign(r, { coming, guests, late: !softOpen(day) }); else db.rsvps.push({ day, user_id: "me", coming, guests, late: !softOpen(day) });
     },
     async addPayment(from_user, to_user, amount) { db.payments.push({ id: ++pid, from_user, to_user, amount, created_by: "me", created_at: new Date().toISOString() }); },
     async deletePayment(id) { db.payments = db.payments.filter(p => p.id !== id); },
@@ -553,17 +555,20 @@ function viewGate() {
 function rsvpBlock(day) {
   const m = meal(day), list = rsvpsOf(day), yes = list.filter(r => r.coming), no = list.filter(r => !r.coming);
   const offen = activeMembers().filter(x => !list.some(r => r.user_id === x.id));
-  const mine = myRsvp(day), open = rsvpOpen(day), cook = isCook(m);
-  const names = l => l.map(r => esc(member(r.user_id ?? r.id).name) + (r.guests ? ` (+${r.guests})` : "")).join(", ") || "–";
+  const mine = myRsvp(day), open = rsvpOpen(day), soft = softOpen(day), cook = isCook(m);
+  const names = l => l.map(r => esc(member(r.user_id ?? r.id).name) + (r.guests || r.late ? ` (${[r.guests ? "+" + r.guests : "", r.late ? "nach Mittwoch" : ""].filter(Boolean).join(", ")})` : "")).join(", ") || "–";
   const P = portions(day), G = P - yes.length, g = mine?.coming ? mine.guests || 0 : 0;
-  return `<div class="zahl"><b>${P}</b><span>${P === 1 ? "Portion" : "Portionen"}<br>${yes.length} ${yes.length === 1 ? "Mitglied" : "Mitglieder"}${G ? `, ${G} ${G === 1 ? "Gast" : "Gäste"}` : ""}${open && offen.length ? `, ${offen.length} ohne Antwort` : ""}</span></div>
-    ${cook ? `<p class="frist">Du kochst und bist automatisch dabei.</p>` : open ? `<div class="rsvp">
+  return `<div class="zahl"><b>${P}</b><span>${P === 1 ? "Portion" : "Portionen"}<br>${yes.length} ${yes.length === 1 ? "Mitglied" : "Mitglieder"}${G ? `, ${G} ${G === 1 ? "Gast" : "Gäste"}` : ""}${soft && offen.length ? `, ${offen.length} ohne Antwort` : ""}</span></div>
+    ${cook ? `<p class="frist">Du kochst und bist automatisch dabei.</p>` : open && soft ? `<div class="rsvp">
       <button class="btn hell ja" data-act="rsvp" data-day="${day}" data-v="1" aria-pressed="${mine?.coming === true}">Ich esse mit</button>
-      <button class="btn hell nein" data-act="rsvp" data-day="${day}" data-v="0" aria-pressed="${mine?.coming === false}">Ich bin raus</button></div>` : ""}
-    ${open && mine?.coming ? `<div class="gaeste"><span>Gäste mitbringen</span>
-      <button data-act="gast" data-day="${day}" data-d="-1" ${g ? "" : "disabled"} aria-label="Ein Gast weniger">−</button><b aria-live="polite">${g}</b>
+      <button class="btn hell nein" data-act="rsvp" data-day="${day}" data-v="0" aria-pressed="${mine?.coming === false}">Ich bin raus</button></div>`
+      : open && !mine?.coming ? `<div class="rsvp" style="grid-template-columns:1fr"><button class="btn senf" data-act="rsvp" data-day="${day}" data-v="1">Noch nachmelden</button></div>` : ""}
+    ${open && mine?.coming ? `<div class="gaeste"><span>${soft ? "Gäste mitbringen" : "Gäste nachmelden"}</span>
+      <button data-act="gast" data-day="${day}" data-d="-1" ${g && soft ? "" : "disabled"} aria-label="Ein Gast weniger">−</button><b aria-live="polite">${g}</b>
       <button data-act="gast" data-day="${day}" data-d="1" ${g < 5 ? "" : "disabled"} aria-label="Ein Gast mehr">+</button></div>` : ""}
-    <p class="frist ${open ? "" : "dicht"}">${open ? `An- und Abmelden bis Mittwoch, ${fmtFrist(day)}, 23:59 Uhr` : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}`}</p>
+    <p class="frist ${open ? "" : "dicht"}">${soft ? `An- und Abmelden bis Mittwoch, ${fmtFrist(day)}, 23:59 Uhr`
+      : open ? (mine?.coming && !cook ? "Du bist dabei. Absagen geht nach Mittwoch nicht mehr, Gäste nachmelden noch bis Donnerstag 18 Uhr." : cook ? "Nachmeldungen sind noch bis Donnerstag 18 Uhr möglich." : "Die Frist war Mittwoch. Nachmelden geht noch bis Donnerstag 18 Uhr.")
+      : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}`}</p>
     <details class="wer"><summary>Wer kommt</summary><dl class="namen">
       <dt>Dabei (${yes.length})</dt><dd>${names(yes)}</dd><dt>Abgemeldet (${no.length})</dt><dd>${names(no)}</dd>
       ${open ? `<dt>Ohne Antwort (${offen.length})</dt><dd>${names(offen)}</dd>` : ""}</dl></details>`;
@@ -705,8 +710,8 @@ function sheetMeal(day) {
   }
   // Kosten
   const sh = shares(m), my = sh?.map.get(S.me.id);
-  if (m.cost != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0"><b>${euro(cents(m.cost))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss.`}</p></div>`;
-  else if (cook && !rsvpOpen(day)) h += `<div class="block"><h3>Einkauf</h3><p>Trag ein, was du ausgegeben hast. Die App verteilt den Betrag auf alle Portionen.</p><button class="btn klein senf" data-act="edit" data-v="1">Einkaufskosten eintragen</button></div>`;
+  if (m.cost != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0"><b>${euro(cents(m.cost))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss am Donnerstagabend.`}</p></div>`;
+  else if (cook && !softOpen(day)) h += `<div class="block"><h3>Einkauf</h3><p>Trag ein, was du ausgegeben hast. Die App verteilt den Betrag auf alle Portionen.</p><button class="btn klein senf" data-act="edit" data-v="1">Einkaufskosten eintragen</button></div>`;
   // Bewertung
   if (day <= today()) {
     h += `<div class="block"><h3>Bewertungen${rs.length ? ` (${rs.length})` : ""}</h3>`;
@@ -740,7 +745,7 @@ function sheetKasse() {
     <div class="block"><h3>Alle Kontostände</h3>${[...bal].filter(([id, c]) => c || member(id).active).sort((a, b) => b[1] - a[1]).map(([id, c]) => `<div class="stimme" style="align-items:center">${avatar(member(id), "s")}<div style="flex:1"><b>${esc(member(id).name)}</b></div><span class="betrag ${c < 0 ? "minus" : c > 0 ? "plus" : ""}">${euroPlus(c)}</span></div>`).join("")}</div>
     <div class="block"><h3>Letzte Zahlungen</h3>${zahlungen.length ? zahlungen.map(p => `<div class="stimme" style="align-items:center"><div style="flex:1"><b>${esc(member(p.from_user).name)}</b> an <b>${esc(member(p.to_user).name)}</b><br><small style="color:var(--grau)">${new Date(p.created_at).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })}</small></div><span class="betrag">${euro(cents(p.amount))}</span>
       ${p.created_by === me || S.me.is_admin ? `<button class="btn klein rot" data-act="zahlweg" data-id="${p.id}" aria-label="Zahlung löschen">Löschen</button>` : ""}</div>`).join("") : `<p style="margin:0;color:var(--grau)">Noch keine Zahlungen eingetragen.</p>`}</div>
-    <p class="hinweis">Die Einkaufskosten eines Freitags werden nach Anmeldeschluss auf alle Portionen verteilt. Gäste zählen bei dem Mitglied, das sie mitbringt. Wer kocht, bekommt die Kosten gutgeschrieben, bei zwei Köchen je zur Hälfte.${offen ? ` Für ${offen} Essen fehlen noch die Einkaufskosten.` : ""}</p>`;
+    <p class="hinweis">Die Einkaufskosten eines Freitags werden nach Anmeldeschluss am Donnerstagabend auf alle Portionen verteilt. Gäste zählen bei dem Mitglied, das sie mitbringt. Wer kocht, bekommt die Kosten gutgeschrieben, bei zwei Köchen je zur Hälfte.${offen ? ` Für ${offen} Essen fehlen noch die Einkaufskosten.` : ""}</p>`;
 }
 function sheetProfil() {
   const admin = S.me.is_admin;
@@ -750,7 +755,7 @@ function sheetProfil() {
       <button class="btn klein" style="min-height:48px">Speichern</button></form></div>
     ${B.demo ? "" : `<div class="block"><h3>Erinnerungen</h3>${S.push === null
       ? `<p style="margin:0;color:var(--grau)">Auf diesem Gerät sind Mitteilungen hier nicht möglich. Auf dem iPhone: die App zuerst über „Teilen“ zum Home-Bildschirm hinzufügen und von dort öffnen.</p>`
-      : `<p style="color:var(--grau);font-size:14.5px">Mittwochnachmittag, falls du dich noch nicht an- oder abgemeldet hast. Wenn du kochst, bekommst du Donnerstag früh die Zahl der Portionen.</p>
+      : `<p style="color:var(--grau);font-size:14.5px">Mittwochnachmittag, falls du dich noch nicht an- oder abgemeldet hast. Wenn du kochst, bekommst du Donnerstag früh die Zahl der Portionen und Donnerstagabend den Endstand mit allen Nachmeldungen.</p>
         <button class="btn klein ${S.push ? "hell" : "senf"}" data-act="${S.push ? "pushaus" : "pushan"}">${S.push ? "Auf diesem Gerät ausschalten" : "Auf diesem Gerät einschalten"}</button>`}</div>`}
     ${admin ? `<div class="block"><h3>Einladungscode</h3><p style="color:var(--grau);font-size:14.5px">Neue Mitglieder registrieren sich in der App und geben diesen Code ein.</p>
       <form data-form="invite" style="display:flex;gap:10px"><input class="ein" style="margin:0" name="code" required minlength="4" value="${esc(S.invite ?? "")}" autocapitalize="characters"><button class="btn klein" style="min-height:48px">Ändern</button></form></div>` : ""}
@@ -791,7 +796,7 @@ const ACT = {
   kasse() { S.sheet = { type: "kasse" }; render(); },
   rsvp(el) {
     const day = el.dataset.day, v = el.dataset.v === "1";
-    run("rsvp", () => B.setRsvp(day, v, v ? myRsvp(day)?.guests || 0 : 0), v ? "Du bist angemeldet." : "Du bist abgemeldet.");
+    run("rsvp", () => B.setRsvp(day, v, v ? myRsvp(day)?.guests || 0 : 0), v ? (softOpen(day) ? "Du bist angemeldet." : "Du bist nachgemeldet.") : "Du bist abgemeldet.");
   },
   gast(el) {
     const day = el.dataset.day, g = Math.max(0, Math.min(5, (myRsvp(day)?.guests || 0) + +el.dataset.d));
