@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KPT – Kulinarisches Projekt TEam</title>
+<meta name="theme-color" content="#0f4a4c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="KPT">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --emaille:#0f4a4c; --emaille-tief:#0a3536; --kachel:#e9f0ec; --papier:#fffdf6;
+  --holz:#b9824a; --holz-hell:#e9d3b4; --senf:#e8b93a; --tomate:#c4412a; --gruen:#2f7d4f;
+  --tinte:#15201f; --grau:#5d6b68; --linie:#cfdad5;
+  --display:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  --text:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--kachel);color:var(--tinte);font:16px/1.45 var(--text);
+  -webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
+/* Kachel-Fugen als ruhiger Hintergrund */
+body{background-image:linear-gradient(#dbe6e0 1px,transparent 1px),linear-gradient(90deg,#dbe6e0 1px,transparent 1px);background-size:56px 56px}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.1;letter-spacing:-.01em}
+:focus-visible{outline:3px solid var(--senf);outline-offset:2px}
+[hidden]{display:none!important}
+
+#app{max-width:560px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column}
+header.top{position:sticky;top:0;z-index:5;background:var(--emaille);color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px}
+header.top .logo{font:800 22px/1 var(--display);letter-spacing:.02em;color:var(--senf)}
+header.top .sub{font-size:13px;opacity:.8;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.demo{background:var(--senf);color:var(--tinte);font-size:13px;font-weight:600;text-align:center;padding:5px 12px}
+main{flex:1;padding:16px 14px calc(92px + env(safe-area-inset-bottom))}
+main.chat{padding-bottom:0;display:flex;flex-direction:column}
+
+nav.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;z-index:6;
+  background:var(--emaille);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+nav.tabs button{flex:1;color:#b9d0cd;font-size:11.5px;font-weight:600;display:flex;flex-direction:column;
+  align-items:center;gap:3px;padding:6px 0;border-radius:10px;position:relative}
+nav.tabs svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button[aria-current="page"]{color:var(--senf)}
+nav.tabs .dot{position:absolute;top:4px;left:calc(50% + 8px);width:9px;height:9px;border-radius:50%;background:var(--tomate);border:2px solid var(--emaille)}
+
+/* Avatare */
+.av{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;flex:none;
+  font:700 13px/1 var(--display);color:#fff;background:var(--c,#567)}
+.av.s{width:26px;height:26px;font-size:10.5px}
+.av.l{width:64px;height:64px;font-size:24px}
+
+/* Knöpfe */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 18px;
+  border-radius:12px;font-weight:700;background:var(--emaille);color:#fff}
+.btn.senf{background:var(--senf);color:var(--tinte)}
+.btn.hell{background:#fff;color:var(--tinte);box-shadow:inset 0 0 0 1.5px var(--linie)}
+.btn.rot{background:#fff;color:var(--tomate);box-shadow:inset 0 0 0 1.5px #e6b8ae}
+.btn.klein{min-height:36px;padding:0 12px;font-size:14px;border-radius:10px}
+.btn.voll{width:100%}
+.btn[disabled]{opacity:.5;cursor:default}
+.link{color:var(--emaille);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+
+/* Der Bon: das Essen am nächsten Freitag */
+.bon{background:var(--papier);padding:20px 18px 26px;position:relative;margin:4px 2px 26px;
+  box-shadow:0 1px 0 #d9d2bd,0 10px 24px -14px rgba(10,53,54,.55);
+  --z:10px;
+  -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50% 100%/var(--z) calc(var(--z)/2) repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - var(--z)/2) no-repeat;
+          mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50% 100%/var(--z) calc(var(--z)/2) repeat-x,linear-gradient(#000 0 0) top/100% calc(100% - var(--z)/2) no-repeat}
+.bon .kopf{display:flex;justify-content:space-between;align-items:baseline;font-size:13.5px;color:var(--grau);font-weight:600}
+.bon h2{font-size:clamp(28px,8.4vw,38px);font-weight:800;margin:10px 0 6px;text-wrap:balance}
+.bon .koch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:600}
+.bon p.desc{margin:10px 0 0;color:#3b4744}
+.riss{border:0;border-top:2px dashed #cfc7ae;margin:16px -18px}
+.zahl{display:flex;align-items:flex-end;gap:12px}
+.zahl b{font:800 56px/.85 var(--display);font-variant-numeric:tabular-nums}
+.zahl span{font-size:14.5px;color:var(--grau);padding-bottom:2px}
+.rsvp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.rsvp .btn{min-height:52px}
+.rsvp .btn[aria-pressed="true"].ja{background:var(--gruen);color:#fff;box-shadow:none}
+.rsvp .btn[aria-pressed="true"].nein{background:var(--tomate);color:#fff;box-shadow:none}
+.frist{font-size:13.5px;color:var(--grau);margin:10px 0 0}
+.frist.zu{color:var(--tomate);font-weight:600}
+details.wer{margin-top:12px;font-size:14.5px}
+details.wer summary{cursor:pointer;font-weight:700;color:var(--emaille);list-style:none}
+details.wer summary::-webkit-details-marker{display:none}
+details.wer summary::after{content:" anzeigen"}
+details.wer[open] summary::after{content:" ausblenden"}
+.namen{margin:8px 0 0}
+.namen dt{font-weight:700;margin-top:8px}
+.namen dd{margin:2px 0 0;color:#3b4744}
+
+h2.abschnitt{font-size:20px;font-weight:700;margin:22px 4px 10px}
+.karte{background:#fff;border-radius:16px;box-shadow:0 0 0 1px var(--linie)}
+.zeile{display:flex;align-items:center;gap:12px;padding:12px 14px;width:100%;text-align:left}
+.zeile + .zeile{border-top:1px solid var(--linie)}
+.zeile .mitte{flex:1;min-width:0}
+.zeile .mitte b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zeile .mitte small{color:var(--grau);font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{flex:none;width:50px;text-align:center;font-family:var(--display);line-height:1}
+.tag b{display:block;font-size:24px;font-weight:800}
+.tag small{font-size:12px;color:var(--grau);font-weight:600}
+.frei{color:var(--grau);font-style:italic}
+.monat{font:700 15px var(--display);color:var(--emaille);margin:20px 6px 8px}
+.leer{text-align:center;color:var(--grau);padding:28px 16px}
+
+/* Kochlöffel */
+.loeffel{display:inline-flex;gap:1px;vertical-align:middle}
+.loeffel svg{width:18px;height:24px}
+.loeffel .aus{opacity:.22}
+.loeffel.gross svg{width:38px;height:52px}
+.loeffel.gross button{padding:4px 3px;border-radius:10px}
+.loeffel.gross button.aus{opacity:.25}
+.schnitt{font:800 17px var(--display);font-variant-numeric:tabular-nums;margin-left:6px;vertical-align:middle}
+
+/* Essen-Archiv */
+.essen{display:grid;grid-template-columns:92px 1fr;gap:12px;padding:10px;width:100%;text-align:left;align-items:center}
+.essen + .essen{border-top:1px solid var(--linie)}
+.essen .bild{width:92px;height:92px;border-radius:12px;background:var(--holz-hell) center/cover;display:grid;place-items:center}
+.essen h3{font-size:18px;font-weight:700;margin-bottom:3px}
+.essen small{color:var(--grau);display:block;font-size:13.5px}
+
+/* Blatt (Detailansicht) */
+.blatt{position:fixed;inset:0;z-index:20;background:rgba(10,53,54,.55);display:flex;justify-content:center;align-items:flex-end}
+.blatt .innen{background:var(--kachel);width:100%;max-width:560px;max-height:94dvh;overflow:auto;border-radius:22px 22px 0 0;
+  padding:0 16px calc(28px + env(safe-area-inset-bottom));animation:hoch .22s ease-out}
+@keyframes hoch{from{transform:translateY(40px);opacity:.4}}
+@media (prefers-reduced-motion:reduce){.blatt .innen{animation:none}}
+.blatt .leiste{position:sticky;top:0;background:var(--kachel);display:flex;justify-content:space-between;align-items:center;
+  padding:12px 0 8px;z-index:2;font-weight:600;color:var(--grau);font-size:14.5px}
+.zu{width:40px;height:40px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px var(--linie);font-size:22px;line-height:1}
+.blatt h2.titel{font-size:30px;font-weight:800;margin:4px 0 8px;text-wrap:balance}
+.block{background:#fff;border-radius:16px;box-shadow:0 0 0 1px var(--linie);padding:14px;margin-top:14px}
+.block h3{font-size:17px;font-weight:700;margin-bottom:8px}
+.block p{margin:0 0 8px}
+.rezept{white-space:pre-wrap;overflow-wrap:anywhere}
+.fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fotos .f{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--holz-hell)}
+.fotos img{width:100%;height:100%;object-fit:cover;display:block}
+.fotos .weg{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;background:rgba(21,32,31,.7);color:#fff;font-size:16px}
+.fotos label{aspect-ratio:1;border-radius:10px;border:2px dashed var(--holz);display:grid;place-items:center;text-align:center;
+  font-size:13.5px;font-weight:700;color:var(--holz);cursor:pointer;padding:6px}
+.gross-bild{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.92);display:grid;place-items:center}
+.gross-bild img{max-width:100%;max-height:100%}
+.stimme{display:flex;gap:10px;padding:10px 0}
+.stimme + .stimme{border-top:1px solid var(--linie)}
+.stimme p{margin:2px 0 0;color:#3b4744}
+
+label.feld{display:block;font-weight:600;font-size:14.5px;margin:12px 0 0}
+input.ein,textarea.ein{display:block;width:100%;margin-top:5px;padding:12px;border:1.5px solid var(--linie);border-radius:12px;background:#fff;font-size:16px}
+textarea.ein{min-height:92px;resize:vertical}
+input.ein:focus,textarea.ein:focus{outline:none;border-color:var(--emaille)}
+.reihe{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+
+/* Chat */
+.verlauf{flex:1;display:flex;flex-direction:column;gap:6px;padding-bottom:12px}
+.msg{max-width:82%;align-self:flex-start;display:flex;gap:8px;align-items:flex-end}
+.msg .blase{background:#fff;border-radius:16px 16px 16px 4px;padding:8px 12px;box-shadow:0 0 0 1px var(--linie);overflow-wrap:anywhere;white-space:pre-wrap}
+.msg .wer{font-size:12.5px;font-weight:700;color:var(--emaille);display:block}
+.msg time{font-size:11px;color:var(--grau);margin-left:8px;white-space:nowrap}
+.msg.ich{align-self:flex-end}
+.msg.ich .blase{background:var(--emaille);color:#fff;border-radius:16px 16px 4px 16px;box-shadow:none}
+.msg.ich time{color:#b9d0cd}
+.msg .x{color:var(--grau);font-size:18px;padding:4px}
+.tagtrenner{align-self:center;font-size:12.5px;font-weight:600;color:var(--grau);background:#fff;border-radius:99px;padding:3px 10px;margin:8px 0 2px;box-shadow:0 0 0 1px var(--linie)}
+form.senden{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));display:flex;gap:8px;padding:8px 0 10px;background:linear-gradient(transparent,var(--kachel) 30%)}
+form.senden textarea{flex:1;min-height:46px;max-height:120px;padding:11px 14px;border:1.5px solid var(--linie);border-radius:23px;resize:none;background:#fff;font-size:16px}
+form.senden button{width:46px;height:46px;border-radius:50%;background:var(--senf);flex:none;display:grid;place-items:center}
+
+/* Ranking */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;padding:8px 14px;border-radius:99px;background:#fff;box-shadow:0 0 0 1px var(--linie);font-weight:600;font-size:14.5px}
+.chips button[aria-pressed="true"]{background:var(--emaille);color:#fff;box-shadow:none}
+.sieger{background:var(--emaille);color:#fff;border-radius:18px;padding:18px 16px;display:flex;gap:14px;align-items:center;margin-bottom:12px}
+.sieger .av{box-shadow:0 0 0 3px var(--senf)}
+.sieger h3{font-size:24px;font-weight:800}
+.sieger small{color:var(--senf);font-weight:700;font-size:13.5px}
+.sieger .wert{margin-top:4px;font-size:14.5px;color:#d6e4e1}
+.platz{flex:none;width:26px;font:800 18px var(--display);color:var(--grau);text-align:center}
+.wert-r{flex:none;text-align:right;font-size:13.5px;color:var(--grau)}
+.wert-r b{display:block;font:800 18px var(--display);color:var(--tinte);font-variant-numeric:tabular-nums}
+.hinweis{font-size:13.5px;color:var(--grau);margin:10px 6px}
+
+/* Anmelden */
+.tor{min-height:100dvh;background:var(--emaille);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:28px 22px}
+.tor h1{font-size:64px;font-weight:800;color:var(--senf);letter-spacing:.01em}
+.tor p.lang{font:500 20px/1.2 var(--display);margin:6px 0 26px}
+.tor form{background:var(--papier);color:var(--tinte);border-radius:18px;padding:18px}
+.tor form h2{font-size:22px}
+.tor .wechsel{margin-top:16px;text-align:center;font-size:15px}
+.tor .wechsel button{color:var(--senf);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;
+  background:var(--tinte);color:#fff;padding:11px 16px;border-radius:12px;font-weight:600;font-size:14.5px;max-width:min(92vw,480px);
+  text-align:center;box-shadow:0 8px 24px -8px rgba(0,0,0,.5)}
+#toast.fehler{background:var(--tomate)}
+.pille{font:700 13.5px var(--display);font-variant-numeric:tabular-nums;padding:7px 11px;border-radius:99px;background:rgba(255,255,255,.14);color:#fff;white-space:nowrap}
+.pille.minus{background:#f6d9d2;color:#8f2a17}
+.pille.plus{background:#d5ecd9;color:#1d5a36}
+.gaeste{display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:600}
+.gaeste span{flex:1}
+.gaeste button{width:42px;height:42px;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 1.5px var(--linie);font-size:22px;font-weight:700;line-height:1}
+.gaeste button[disabled]{opacity:.35}
+.gaeste b{font:800 22px var(--display);min-width:22px;text-align:center}
+.stand{background:var(--emaille);color:#fff;border-radius:18px;padding:18px 16px;margin-top:6px}
+.stand b{display:block;font:800 44px/1 var(--display);font-variant-numeric:tabular-nums;margin:4px 0 6px}
+.stand small{color:#d6e4e1;font-size:14.5px}
+.betrag{font:800 17px var(--display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.betrag.minus{color:var(--tomate)} .betrag.plus{color:var(--gruen)}
+.tipp{background:#fff;border-radius:16px;box-shadow:0 0 0 1px var(--linie);padding:14px;margin:0 0 18px;display:flex;gap:12px;align-items:center}
+.tipp p{margin:0;flex:1;font-size:14.5px}
+.laden{display:grid;place-items:center;min-height:100dvh;color:var(--grau);font-weight:600}
+</style>
+</head>
+<body>
+<div id="root"><div class="laden">KPT wird geladen …</div></div>
+<div id="toast" role="status" hidden></div>
+<script src="config.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   KPT – Kulinarisches Projekt TEam
+   Eine Datei: Oberfläche, Demo-Daten und Anbindung an Supabase.
+   ============================================================ */
+
+const CFG = window.KPT_CONFIG || {};
+const LIVE = /^https:\/\/.+/.test(CFG.SUPABASE_URL || "") && (CFG.SUPABASE_KEY || "").length > 20;
+
+// ---------- kleine Helfer ----------
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad = n => String(n).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+const today = () => iso(new Date());
+const nextFriday = (from = today()) => addDays(from, (5 - parse(from).getDay() + 7) % 7);
+const rsvpOpen = day => new Date() < parse(addDays(day, -1));           // bis Mittwoch 23:59
+const fmt = (day, o) => parse(day).toLocaleDateString("de-DE", o);
+const fmtLong = day => fmt(day, { weekday: "long", day: "numeric", month: "long" });
+const fmtFrist = day => fmt(addDays(day, -2), { day: "numeric", month: "numeric" });
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* egal */ } }
+};
+
+const SPOON = '<svg viewBox="0 0 18 24" aria-hidden="true"><rect x="7.6" y="10" width="2.8" height="13.5" rx="1.4" fill="#b9824a"/><ellipse cx="9" cy="6.6" rx="4.9" ry="6.2" fill="#b9824a"/><ellipse cx="9" cy="6.9" rx="3" ry="4.2" fill="#9a6835"/></svg>';
+const spoons = n => `<span class="loeffel" role="img" aria-label="${n} von 5 Kochlöffeln">${[1, 2, 3, 4, 5].map(i => `<span class="${i <= Math.round(n) ? "" : "aus"}">${SPOON}</span>`).join("")}</span>`;
+const num = (x, d = 1) => x.toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+const FARBEN = ["#0f6b6e", "#b9582a", "#6a4c93", "#2f7d4f", "#a4343a", "#34618f", "#8a6d1d", "#7a4a2b", "#3d6b57", "#8c3f6d"];
+const hash = s => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+const initials = n => n.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+const avatar = (m, cls = "") => `<span class="av ${cls}" style="--c:${FARBEN[hash(m?.id) % FARBEN.length]}" aria-hidden="true">${esc(initials(m?.name || "?"))}</span>`;
+
+let toastTimer;
+function toast(msg, fehler = false) {
+  const t = $("#toast"); t.textContent = msg; t.className = fehler ? "fehler" : ""; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), fehler ? 5000 : 2600);
+}
+
+// ---------- Zustand ----------
+const S = {
+  me: null, members: [], meals: [], rsvps: [], ratings: [], photos: [], payments: [], messages: [], push: null,
+  tab: "start", sheet: null, weeks: 12, board: "beste", invite: null, auth: "login", gate: null, draft: 0
+};
+const member = id => S.members.find(m => m.id === id) || { id, name: "Ehemaliges Mitglied" };
+const meal = day => S.meals.find(m => m.day === day);
+const cooks = m => [m.cook1, m.cook2].filter(Boolean);
+const isCook = m => !!m && cooks(m).includes(S.me.id);
+const cookNames = m => cooks(m).map(id => member(id).name).join(" & ");
+const rsvpsOf = day => S.rsvps.filter(r => r.day === day);
+const myRsvp = day => S.rsvps.find(r => r.day === day && r.user_id === S.me.id);
+const ratingsOf = day => S.ratings.filter(r => r.day === day);
+const avg = list => list.length ? list.reduce((s, r) => s + r.spoons, 0) / list.length : 0;
+const photosOf = day => S.photos.filter(p => p.day === day);
+const mayRate = m => m && m.day <= today() && !isCook(m) && myRsvp(m.day)?.coming;
+const activeMembers = () => S.members.filter(m => m.active);
+const portionsOf = r => 1 + (r.guests || 0);
+const portions = day => rsvpsOf(day).filter(r => r.coming).reduce((n, r) => n + portionsOf(r), 0);
+const euro = c => (c / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+const euroPlus = c => (c > 0 ? "+" : "") + euro(c);
+const cents = x => Math.round(Number(x) * 100);
+
+// Clubkasse: Anteil je Portion, Köche bekommen die Kosten gutgeschrieben (Cent-genau, Summe immer 0)
+function shares(m) {
+  if (m.cost == null || rsvpOpen(m.day)) return null;
+  const rs = rsvpsOf(m.day).filter(r => r.coming), total = rs.reduce((n, r) => n + portionsOf(r), 0);
+  if (!total) return null;
+  const map = new Map(); let sum = 0;
+  rs.forEach(r => { const c = Math.round(cents(m.cost) * portionsOf(r) / total); sum += c; map.set(r.user_id, c); });
+  return { map, sum, total, per: cents(m.cost) / total };
+}
+function balances() {
+  const bal = new Map(S.members.map(m => [m.id, 0])), add = (id, c) => bal.set(id, (bal.get(id) || 0) + c);
+  for (const m of S.meals) {
+    const sh = shares(m); if (!sh) continue;
+    sh.map.forEach((c, id) => add(id, -c));
+    const cs = cooks(m), part = Math.floor(sh.sum / cs.length);
+    cs.forEach((id, i) => add(id, i ? part : sh.sum - part * (cs.length - 1)));
+  }
+  for (const p of S.payments) { add(p.from_user, cents(p.amount)); add(p.to_user, -cents(p.amount)); }
+  return bal;
+}
+function settle(bal) {
+  const d = [...bal].filter(([, c]) => c < 0).map(([id, c]) => ({ id, c: -c })).sort((a, b) => b.c - a.c);
+  const k = [...bal].filter(([, c]) => c > 0).map(([id, c]) => ({ id, c })).sort((a, b) => b.c - a.c);
+  const out = []; let i = 0, j = 0;
+  while (i < d.length && j < k.length) {
+    const x = Math.min(d[i].c, k[j].c); out.push({ from: d[i].id, to: k[j].id, c: x });
+    if (!(d[i].c -= x)) i++; if (!(k[j].c -= x)) j++;
+  }
+  return out;
+}
+
+// ============================================================
+// Datenquelle 1: Demo (Beispieldaten, nichts wird gespeichert)
+// ============================================================
+function demoBackend() {
+  let seed = 20261111;
+  const rnd = () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const names = ["Ralf", "Sabine", "Thomas", "Katrin", "Michael", "Julia", "Stefan", "Petra", "Andreas", "Nicole", "Markus", "Heike", "Jens", "Claudia", "Uwe"];
+  const members = names.map((name, i) => ({ id: i ? "m" + i : "me", name, is_admin: i === 0, active: true }));
+  const dishes = [
+    ["Rinderrouladen mit Rotkohl", "Klassisch geschmort, dazu Kartoffelklöße."],
+    ["Kürbis-Risotto", "Mit Salbeibutter und gerösteten Kernen."],
+    ["Chili con Carne", "Zwei Töpfe: einer mild, einer mit Ansage."],
+    ["Käsespätzle mit Röstzwiebeln", "Handgeschabt, dazu grüner Salat."],
+    ["Thai-Curry mit Hähnchen", "Rote Currypaste, Kokosmilch, Jasminreis."],
+    ["Lasagne al forno", "Ragù vom Vortag, frische Nudelplatten."],
+    ["Linseneintopf mit Mettwurst", "Wie bei Oma, mit einem Schuss Essig."],
+    ["Flammkuchen-Variationen", "Elsässer Art und eine Runde mit Birne und Ziegenkäse."]
+  ];
+  const plate = h => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="hsl(${h},28%,82%)"/><circle cx="100" cy="100" r="78" fill="#fffdf6"/><circle cx="100" cy="100" r="58" fill="#f1ece0"/><circle cx="84" cy="92" r="26" fill="hsl(${h},55%,45%)"/><circle cx="118" cy="110" r="22" fill="hsl(${(h + 40) % 360},50%,55%)"/><circle cx="104" cy="78" r="12" fill="hsl(${(h + 100) % 360},45%,45%)"/></svg>`);
+  const nf = nextFriday();
+  const db = { meals: [], rsvps: [], ratings: [], photos: [], messages: [], payments: [] };
+  const comments = ["Sehr lecker, gerne wieder!", "Hätte etwas mehr Würze vertragen.", "Bestes Essen seit Wochen.", "Solide Hausmannskost.", "Die Soße war ein Gedicht.", "", "", ""];
+  dishes.forEach((d, i) => {
+    const day = addDays(nf, -7 * (dishes.length - i));
+    const c1 = members[(i * 3 + 1) % 15].id, c2 = i === 5 ? members[9].id : null;
+    db.meals.push({ day, cook1: c1, cook2: c2, title: d[0], description: d[1], cost: 58 + Math.round(rnd() * 500) / 10, recipe: i % 2 ? "" : "Zutaten für 12 Personen\n– 2 kg Hauptzutat\n– 1 kg Beilage\n– Gewürze nach Gefühl\n\nZubereitung\nAlles vorbereiten, in Ruhe schmoren lassen und rechtzeitig abschmecken." });
+    const base = 3 + rnd() * 1.8;
+    members.forEach(m => {
+      const cook = m.id === c1 || m.id === c2, coming = cook || rnd() < 0.8;
+      db.rsvps.push({ day, user_id: m.id, coming, guests: coming && rnd() < 0.1 ? 1 + Math.floor(rnd() * 2) : 0 });
+      if (coming && !cook && rnd() < 0.85 && !(m.id === "me" && i === dishes.length - 1))
+        db.ratings.push({ day, user_id: m.id, spoons: Math.max(1, Math.min(5, Math.round(base + (rnd() - .5) * 1.6))), comment: comments[Math.floor(rnd() * comments.length)], created_at: day + "T14:00:00" });
+    });
+    for (let k = 0; k < (i % 3 === 1 ? 0 : 1 + (i % 2)); k++) db.photos.push({ id: "p" + i + k, day, user_id: c1, url: plate((i * 47 + k * 90) % 360), created_at: day });
+  });
+  db.meals.push({ day: nf, cook1: "m4", cook2: null, title: "Königsberger Klopse", description: "Mit Kapernsoße, Salzkartoffeln und Rote-Bete-Salat.", recipe: "" });
+  db.meals.push({ day: addDays(nf, 14), cook1: "m7", cook2: null, title: "", description: "", recipe: "" });
+  db.meals.push({ day: addDays(nf, 21), cook1: "m2", cook2: "m11", title: "Grünkohl mit Pinkel", description: "", recipe: "" });
+  members.forEach((m, i) => { if (m.id === "m4") db.rsvps.push({ day: nf, user_id: m.id, coming: true, guests: 0 }); else if (i && i < 11) db.rsvps.push({ day: nf, user_id: m.id, coming: i % 5 !== 0, guests: i === 3 ? 2 : 0 }); });
+  db.payments.push({ id: 1, from_user: "me", to_user: "m1", amount: 20, created_by: "me", created_at: addDays(nf, -20) + "T12:00:00" },
+                   { id: 2, from_user: "m5", to_user: "m4", amount: 12.5, created_by: "m4", created_at: addDays(nf, -9) + "T12:00:00" });
+  const t = (d, h) => { const x = new Date(); x.setDate(x.getDate() - d); x.setHours(h, 12, 0, 0); return x.toISOString(); };
+  [["m4", 2, 9, "Für Freitag gibt es Königsberger Klopse. Bitte bis Mittwoch eintragen, ich kaufe Donnerstag früh ein."],
+   ["m6", 2, 10, "Bin dabei! Gibt es auch eine Variante ohne Kapern?"],
+   ["m4", 2, 10, "Für dich mache ich eine Extra-Portion ohne."],
+   ["m9", 1, 16, "Wer hat eigentlich den großen Bräter zuletzt gehabt?"],
+   ["m2", 1, 17, "Steht bei mir im Büro, bringe ich Freitag mit."]
+  ].forEach((m, i) => db.messages.push({ id: i + 1, user_id: m[0], body: m[3], created_at: t(m[1], m[2]) }));
+  let invite = "KOCHLOEFFEL", mid = 100, pid = 10, onMsg = () => {};
+  const ok = async v => v;
+  return {
+    demo: true,
+    init: () => ok({ signedIn: true, profile: members[0] }),
+    loadAll: () => ok({ members: [...members], meals: [...db.meals], rsvps: [...db.rsvps], ratings: [...db.ratings], photos: [...db.photos], payments: [...db.payments] }),
+    loadMessages: () => ok([...db.messages]),
+    subscribe(m) { onMsg = m; },
+    async sendMessage(body) { const m = { id: ++mid, user_id: "me", body, created_at: new Date().toISOString() }; db.messages.push(m); onMsg(m); },
+    async deleteMessage(id) { db.messages = db.messages.filter(m => m.id !== id); },
+    async claim(day) {
+      let m = db.meals.find(x => x.day === day);
+      if (!m) db.meals.push({ day, cook1: "me", cook2: null, title: "", description: "", recipe: "", cost: null });
+      else if (!m.cook2 && m.cook1 !== "me") m.cook2 = "me";
+      else if (m.cook1 !== "me" && m.cook2 !== "me") throw new Error("An diesem Freitag kochen schon zwei Personen.");
+      await this.setRsvp(day, true, 0, true);
+    },
+    async release(day, who = "me") {
+      const m = db.meals.find(x => x.day === day); if (!m) return;
+      if (m.cook1 === who) { if (m.cook2) { m.cook1 = m.cook2; m.cook2 = null; } else db.meals = db.meals.filter(x => x !== m); }
+      else if (m.cook2 === who) m.cook2 = null;
+    },
+    async saveMeal(day, f) { Object.assign(db.meals.find(x => x.day === day), f); },
+    async setRsvp(day, coming, guests = 0, force) {
+      if (!force && !rsvpOpen(day)) throw new Error("Die Anmeldung ist geschlossen.");
+      const r = db.rsvps.find(x => x.day === day && x.user_id === "me");
+      if (r) Object.assign(r, { coming, guests }); else db.rsvps.push({ day, user_id: "me", coming, guests });
+    },
+    async addPayment(from_user, to_user, amount) { db.payments.push({ id: ++pid, from_user, to_user, amount, created_by: "me", created_at: new Date().toISOString() }); },
+    async deletePayment(id) { db.payments = db.payments.filter(p => p.id !== id); },
+    async rate(day, spoons, comment) {
+      db.ratings = db.ratings.filter(r => !(r.day === day && r.user_id === "me"));
+      db.ratings.push({ day, user_id: "me", spoons, comment, created_at: new Date().toISOString() });
+    },
+    async addPhoto(day, blob) { db.photos.push({ id: "p" + Date.now(), day, user_id: "me", url: URL.createObjectURL(blob), created_at: new Date().toISOString() }); },
+    async deletePhoto(p) { db.photos = db.photos.filter(x => x.id !== p.id); },
+    async updateName(name) { members[0].name = name; },
+    getInvite: () => ok(invite),
+    async setInvite(c) { invite = c; },
+    async setMember(id, active, admin) { Object.assign(members.find(m => m.id === id), { active, is_admin: admin }); },
+    async setPassword() { },
+    async signOut() { }
+  };
+}
+
+// ============================================================
+// Datenquelle 2: Supabase (der echte Betrieb)
+// ============================================================
+function liveBackend() {
+  let sb, uid = null;
+  const DE = [
+    [/Invalid login credentials/i, "E-Mail oder Passwort stimmt nicht."],
+    [/already registered/i, "Diese E-Mail ist schon registriert. Bitte anmelden."],
+    [/Password should be/i, "Das Passwort braucht mindestens 8 Zeichen."],
+    [/valid email|invalid format/i, "Bitte eine gültige E-Mail-Adresse eingeben."],
+    [/Failed to fetch|NetworkError|Load failed/i, "Keine Verbindung. Bitte Internet prüfen und noch einmal versuchen."],
+    [/rate limit/i, "Zu viele Versuche. Bitte kurz warten."]
+  ];
+  const ok = (res, rls) => {
+    if (res.error) {
+      let msg = res.error.message || "Das hat nicht geklappt.";
+      if (/row-level security|permission denied/i.test(msg)) msg = rls || "Das ist nicht erlaubt.";
+      for (const [re, de] of DE) if (re.test(msg)) msg = de;
+      throw new Error(msg);
+    }
+    return res.data;
+  };
+  const all = async (table, order) => {            // holt alle Zeilen, auch über 1000
+    let out = [], from = 0;
+    for (;;) {
+      const rows = ok(await sb.from(table).select("*").order(order).range(from, from + 999));
+      out = out.concat(rows); if (rows.length < 1000) return out; from += 1000;
+    }
+  };
+  const url = path => sb.storage.from("fotos").getPublicUrl(path).data.publicUrl;
+  return {
+    async init() {
+      await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"; s.onload = res; s.onerror = () => rej(new Error("Die App konnte nicht geladen werden. Bitte Internet prüfen.")); document.head.append(s); });
+      sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY);
+      const { data } = await sb.auth.getSession();
+      uid = data.session?.user?.id || null;
+      return this.who();
+    },
+    async who() {
+      if (!uid) return { signedIn: false };
+      return { signedIn: true, profile: ok(await sb.from("profiles").select("*").eq("id", uid).maybeSingle()) };
+    },
+    async signIn(email, password) { uid = ok(await sb.auth.signInWithPassword({ email, password })).user.id; return this.who(); },
+    async signUp(email, password) {
+      const d = ok(await sb.auth.signUp({ email, password }));
+      if (!d.session) throw new Error("Registrierung nicht abgeschlossen: In Supabase ist „Confirm email“ noch eingeschaltet (Anleitung, Schritt 3).");
+      uid = d.user.id; return this.who();
+    },
+    async signOut() { await sb.auth.signOut(); uid = null; },
+    async join(code, name) { ok(await sb.rpc("join_club", { code, member_name: name })); return this.who(); },
+    async loadAll() {
+      const [members, meals, rsvps, ratings, photos, payments] = await Promise.all([all("profiles", "created_at"), all("meals", "day"), all("rsvps", "day"), all("ratings", "day"), all("photos", "created_at"), all("payments", "created_at")]);
+      photos.forEach(p => (p.url = url(p.path)));
+      return { members, meals, rsvps, ratings, photos, payments };
+    },
+    async loadMessages() { return ok(await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(300)).reverse(); },
+    subscribe(onMsg, onData) {
+      sb.channel("kpt").on("postgres_changes", { event: "*", schema: "public" }, p => {
+        if (p.table === "messages" && p.eventType === "INSERT") onMsg(p.new); else onData(p.table);
+      }).subscribe();
+    },
+    async sendMessage(body) { ok(await sb.from("messages").insert({ user_id: uid, body })); },
+    async deleteMessage(id) { ok(await sb.from("messages").delete().eq("id", id)); },
+    async claim(day) { ok(await sb.rpc("claim_friday", { d: day })); },
+    async release(day, who) { ok(await sb.rpc("release_friday", who ? { d: day, who } : { d: day })); },
+    async saveMeal(day, f) { ok(await sb.from("meals").update(f).eq("day", day)); },
+    async setRsvp(day, coming, guests = 0) { ok(await sb.from("rsvps").upsert({ day, user_id: uid, coming, guests }), "Die Anmeldung ist geschlossen."); },
+    async addPayment(from_user, to_user, amount) { ok(await sb.from("payments").insert({ from_user, to_user, amount })); },
+    async deletePayment(id) { ok(await sb.from("payments").delete().eq("id", id)); },
+    async savePush(endpoint, p256dh, auth) { ok(await sb.rpc("save_push", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth })); },
+    async dropPush(endpoint) { ok(await sb.rpc("drop_push", { p_endpoint: endpoint })); },
+    async rate(day, spoons, comment) { ok(await sb.from("ratings").upsert({ day, user_id: uid, spoons, comment }), "Bewerten kann nur, wer angemeldet war und nicht selbst gekocht hat."); },
+    async addPhoto(day, blob) {
+      const path = `${uid}/${day}-${Date.now()}.jpg`;
+      ok(await sb.storage.from("fotos").upload(path, blob, { contentType: "image/jpeg" }));
+      ok(await sb.from("photos").insert({ day, user_id: uid, path }));
+    },
+    async deletePhoto(p) { ok(await sb.from("photos").delete().eq("id", p.id)); await sb.storage.from("fotos").remove([p.path]); },
+    async updateName(name) { ok(await sb.from("profiles").update({ name }).eq("id", uid)); },
+    async getInvite() { return ok(await sb.rpc("get_invite_code")); },
+    async setInvite(code) { ok(await sb.rpc("set_invite_code", { code })); },
+    async setMember(id, active, admin) { ok(await sb.rpc("admin_set_member", { target: id, set_active: active, set_admin: admin })); },
+    async setPassword(id, pw) { ok(await sb.rpc("admin_set_password", { target: id, new_password: pw })); }
+  };
+}
+
+const B = LIVE ? liveBackend() : demoBackend();
+
+// ============================================================
+// Oberfläche
+// ============================================================
+const ICON = {
+  start: '<svg viewBox="0 0 24 24"><path d="M5 3h14v18l-2.3-1.6L14.3 21 12 19.4 9.7 21l-2.4-1.6L5 21z"/><path d="M9 8h6M9 12h6"/></svg>',
+  kalender: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  essen: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>',
+  chat: '<svg viewBox="0 0 24 24"><path d="M4 5.5h16v11H10l-4.5 3.5v-3.5H4z"/></svg>',
+  ranking: '<svg viewBox="0 0 24 24"><path d="M4 20V11h5v9M9.5 20V5h5v15M15 20v-6h5v6M3 20h18"/></svg>'
+};
+const TABS = [["start", "Freitag"], ["kalender", "Kalender"], ["essen", "Essen"], ["chat", "Chat"], ["ranking", "Ranking"]];
+
+function render() {
+  const root = $("#root");
+  if (S.gate) { root.innerHTML = viewGate(); return; }
+  const unread = S.messages.length && S.tab !== "chat" && String(S.messages.at(-1).id) !== store.get("kpt-gelesen") && S.messages.at(-1).user_id !== S.me.id;
+  const mine = balances().get(S.me.id) || 0;
+  root.innerHTML = `<div id="app">
+    <header class="top"><span class="logo">KPT</span><span class="sub">Kulinarisches Projekt TEam</span>
+      <button class="pille ${mine < 0 ? "minus" : mine > 0 ? "plus" : ""}" data-act="kasse" aria-label="Clubkasse, dein Stand ${euro(mine)}">${mine ? euroPlus(mine) : "Kasse"}</button>
+      <button data-act="profil" aria-label="Profil und Mitglieder">${avatar(S.me)}</button></header>
+    ${B.demo ? '<div class="demo">Demo mit Beispieldaten – nichts wird gespeichert</div>' : ""}
+    <main class="${S.tab === "chat" ? "chat" : ""}">${({ start: viewStart, kalender: viewKalender, essen: viewEssen, chat: viewChat, ranking: viewRanking })[S.tab]()}</main>
+    <nav class="tabs" aria-label="Bereiche">${TABS.map(([id, label]) => `<button data-act="tab" data-tab="${id}" ${S.tab === id ? 'aria-current="page"' : ""}>${ICON[id]}${label}${id === "chat" && unread ? '<span class="dot"></span>' : ""}</button>`).join("")}</nav>
+  </div>${S.sheet ? viewSheet() : ""}`;
+  if (S.tab === "chat" && !S.sheet) { scrollChat(); if (S.messages.length) store.set("kpt-gelesen", String(S.messages.at(-1).id)); }
+}
+const scrollChat = () => window.scrollTo(0, document.body.scrollHeight);
+
+// ---------- Anmelden / Beitreten ----------
+function viewGate() {
+  const kopf = `<h1>KPT</h1><p class="lang">Kulinarisches Projekt TEam.<br>Freitags wird gekocht.</p>`;
+  if (S.gate === "join") return `<div class="tor">${kopf}<form data-form="join"><h2>Dem Club beitreten</h2>
+    <label class="feld">Dein Name, wie ihn die anderen sehen<input class="ein" name="name" required minlength="2" maxlength="40" autocomplete="name"></label>
+    <label class="feld">Einladungscode<input class="ein" name="code" required autocapitalize="characters" autocomplete="off"></label>
+    <div class="reihe"><button class="btn senf voll">Beitreten</button></div></form>
+    <p class="wechsel"><button data-act="logout">Abmelden</button></p></div>`;
+  const neu = S.auth === "neu";
+  return `<div class="tor">${kopf}<form data-form="auth"><h2>${neu ? "Neu registrieren" : "Anmelden"}</h2>
+    <label class="feld">E-Mail<input class="ein" type="email" name="email" required autocomplete="email"></label>
+    <label class="feld">Passwort${neu ? " (mindestens 8 Zeichen)" : ""}<input class="ein" type="password" name="pw" required minlength="8" autocomplete="${neu ? "new-password" : "current-password"}"></label>
+    <div class="reihe"><button class="btn senf voll">${neu ? "Registrieren" : "Anmelden"}</button></div></form>
+    <p class="wechsel">${neu ? "Schon dabei?" : "Zum ersten Mal hier?"} <button data-act="authmode">${neu ? "Anmelden" : "Neu registrieren"}</button></p>
+    ${neu ? "" : '<p class="wechsel" style="font-size:13.5px;opacity:.8">Passwort vergessen? Ein Admin kann dir ein neues setzen.</p>'}</div>`;
+}
+
+// ---------- Freitag (Start) ----------
+function rsvpBlock(day) {
+  const m = meal(day), list = rsvpsOf(day), yes = list.filter(r => r.coming), no = list.filter(r => !r.coming);
+  const offen = activeMembers().filter(x => !list.some(r => r.user_id === x.id));
+  const mine = myRsvp(day), open = rsvpOpen(day), cook = isCook(m);
+  const names = l => l.map(r => esc(member(r.user_id ?? r.id).name) + (r.guests ? ` (+${r.guests})` : "")).join(", ") || "–";
+  const P = portions(day), G = P - yes.length, g = mine?.coming ? mine.guests || 0 : 0;
+  return `<div class="zahl"><b>${P}</b><span>${P === 1 ? "Portion" : "Portionen"}<br>${yes.length} ${yes.length === 1 ? "Mitglied" : "Mitglieder"}${G ? `, ${G} ${G === 1 ? "Gast" : "Gäste"}` : ""}${open && offen.length ? `, ${offen.length} ohne Antwort` : ""}</span></div>
+    ${cook ? `<p class="frist">Du kochst und bist automatisch dabei.</p>` : open ? `<div class="rsvp">
+      <button class="btn hell ja" data-act="rsvp" data-day="${day}" data-v="1" aria-pressed="${mine?.coming === true}">Ich esse mit</button>
+      <button class="btn hell nein" data-act="rsvp" data-day="${day}" data-v="0" aria-pressed="${mine?.coming === false}">Ich bin raus</button></div>` : ""}
+    ${open && mine?.coming ? `<div class="gaeste"><span>Gäste mitbringen</span>
+      <button data-act="gast" data-day="${day}" data-d="-1" ${g ? "" : "disabled"} aria-label="Ein Gast weniger">−</button><b aria-live="polite">${g}</b>
+      <button data-act="gast" data-day="${day}" data-d="1" ${g < 5 ? "" : "disabled"} aria-label="Ein Gast mehr">+</button></div>` : ""}
+    <p class="frist ${open ? "" : "zu"}">${open ? `An- und Abmelden bis Mittwoch, ${fmtFrist(day)}, 23:59 Uhr` : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}`}</p>
+    <details class="wer"><summary>Wer kommt</summary><dl class="namen">
+      <dt>Dabei (${yes.length})</dt><dd>${names(yes)}</dd><dt>Abgemeldet (${no.length})</dt><dd>${names(no)}</dd>
+      ${open ? `<dt>Ohne Antwort (${offen.length})</dt><dd>${names(offen)}</dd>` : ""}</dl></details>`;
+}
+function viewStart() {
+  const day = nextFriday(), m = meal(day), heute = day === today();
+  const kopf = `<div class="kopf"><span>${heute ? "Heute" : "Nächster Freitag"}</span><span>${fmt(day, { day: "numeric", month: "long", year: "numeric" })}</span></div>`;
+  const bon = m ? `<section class="bon">${kopf}
+      <h2>${esc(m.title || "Gericht noch geheim")}</h2>
+      <div class="koch">${cooks(m).map(id => avatar(member(id), "s")).join("")}<span>${esc(cookNames(m))} ${cooks(m).length > 1 ? "kochen" : "kocht"}</span></div>
+      ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
+      <hr class="riss">${rsvpBlock(day)}
+      <hr class="riss"><div class="reihe" style="margin-top:0"><button class="btn klein hell" data-act="open" data-day="${day}">${isCook(m) ? "Gericht und Rezept bearbeiten" : "Details, Rezept und Fotos"}</button></div>
+    </section>` : `<section class="bon">${kopf}
+      <h2>Der Herd ist noch frei</h2><p class="desc">Für diesen Freitag hat sich noch niemand zum Kochen eingetragen.</p>
+      <hr class="riss"><button class="btn senf voll" data-act="claim" data-day="${day}">Ich koche am ${fmt(day, { day: "numeric", month: "numeric" })}</button></section>`;
+  const offen = S.meals.filter(x => x.day <= today() && mayRate(x) && !S.ratings.some(r => r.day === x.day && r.user_id === S.me.id)).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 3);
+  const meine = S.meals.filter(x => x.day > day && isCook(x)).sort((a, b) => a.day.localeCompare(b.day));
+  const tipp = S.push === false && store.get("kpt-push-spaeter") !== "1" ? `<div class="tipp"><p><b>Mittwochs erinnert werden?</b><br>Du bekommst eine Mitteilung, wenn du dich noch nicht an- oder abgemeldet hast.</p>
+      <div style="display:grid;gap:6px"><button class="btn klein senf" data-act="pushan">Einschalten</button><button class="btn klein hell" data-act="pushspaeter">Nicht jetzt</button></div></div>` : "";
+  return tipp + bon
+    + (offen.length ? `<h2 class="abschnitt">Noch zu bewerten</h2><div class="karte">${offen.map(x => `<button class="zeile" data-act="open" data-day="${x.day}">
+        <span class="tag"><b>${parse(x.day).getDate()}</b><small>${fmt(x.day, { month: "short" })}</small></span>
+        <span class="mitte"><b>${esc(x.title || "Essen")}</b><small>von ${esc(cookNames(x))}</small></span><span class="loeffel">${SPOON}</span></button>`).join("")}</div>` : "")
+    + (meine.length ? `<h2 class="abschnitt">Deine Kochtermine</h2><div class="karte">${meine.map(x => zeileFreitag(x.day)).join("")}</div>` : "");
+}
+
+// ---------- Kalender ----------
+function zeileFreitag(day) {
+  const m = meal(day);
+  const tag = `<span class="tag"><b>${parse(day).getDate()}</b><small>${fmt(day, { month: "short" })}</small></span>`;
+  if (!m) return `<div class="zeile">${tag}<span class="mitte"><span class="frei">Noch frei</span></span><button class="btn klein senf" data-act="claim" data-day="${day}">Ich koche</button></div>`;
+  return `<button class="zeile" data-act="open" data-day="${day}">${tag}<span class="mitte"><b>${esc(cookNames(m))}</b><small>${esc(m.title || "Gericht noch offen")}</small></span>${cooks(m).map(id => avatar(member(id), "s")).join("")}</button>`;
+}
+function viewKalender() {
+  let out = "", monat = "", first = nextFriday();
+  for (let i = 0; i < S.weeks; i++) {
+    const day = addDays(first, 7 * i), mo = fmt(day, { month: "long", year: "numeric" });
+    if (mo !== monat) { out += `${monat ? "</div>" : ""}<h2 class="monat">${mo}</h2><div class="karte">`; monat = mo; }
+    out += zeileFreitag(day);
+  }
+  const frei = Array.from({ length: S.weeks }, (_, i) => addDays(first, 7 * i)).filter(d => !meal(d)).length;
+  return `<h2 class="abschnitt" style="margin-top:4px">Wer kocht wann</h2><p class="hinweis" style="margin-top:-4px">${frei} von ${S.weeks} Freitagen sind noch frei. Tippe auf „Ich koche“, um dich einzutragen.</p>${out}</div>
+    <div class="reihe" style="justify-content:center"><button class="btn hell" data-act="mehr">Weitere Freitage anzeigen</button></div>`;
+}
+
+// ---------- Essen (Archiv) ----------
+function viewEssen() {
+  const past = S.meals.filter(m => m.day <= today()).sort((a, b) => b.day.localeCompare(a.day));
+  if (!past.length) return `<h2 class="abschnitt" style="margin-top:4px">Was es schon gab</h2><div class="karte leer">Hier erscheinen alle Essen mit Fotos, Rezepten und Bewertungen, sobald der erste Freitag vorbei ist.</div>`;
+  return `<h2 class="abschnitt" style="margin-top:4px">Was es schon gab</h2><div class="karte">${past.map(m => {
+    const r = ratingsOf(m.day), p = photosOf(m.day)[0];
+    return `<button class="essen" data-act="open" data-day="${m.day}">
+      <span class="bild" ${p ? `style="background-image:url('${esc(p.url)}')"` : ""}>${p ? "" : `<span class="loeffel gross">${SPOON}</span>`}</span>
+      <span><h3>${esc(m.title || "Essen ohne Namen")}</h3><small>${fmt(m.day, { day: "numeric", month: "long", year: "numeric" })}, von ${esc(cookNames(m))}</small>
+      <span style="display:block;margin-top:6px">${r.length ? `${spoons(avg(r))}<span class="schnitt">${num(avg(r))}</span>` : `<small>Noch keine Bewertung</small>`}</span>
+      <small>${[m.recipe ? "Rezept" : "", photosOf(m.day).length ? `${photosOf(m.day).length} Foto${photosOf(m.day).length > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ")}</small></span></button>`;
+  }).join("")}</div>`;
+}
+
+// ---------- Chat ----------
+function msgHtml(m, prev) {
+  const ich = m.user_id === S.me.id, d = new Date(m.created_at), dayKey = d.toDateString();
+  const trenner = !prev || new Date(prev.created_at).toDateString() !== dayKey ? `<div class="tagtrenner">${dayKey === new Date().toDateString() ? "Heute" : d.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" })}</div>` : "";
+  const zeit = `<time>${pad(d.getHours())}:${pad(d.getMinutes())}</time>`;
+  const weg = ich || S.me.is_admin ? `<button class="x" data-act="msgweg" data-id="${m.id}" aria-label="Nachricht löschen">×</button>` : "";
+  return trenner + `<div class="msg ${ich ? "ich" : ""}">${ich ? weg : avatar(member(m.user_id), "s")}<div class="blase">${ich ? "" : `<span class="wer">${esc(member(m.user_id).name)}</span>`}${esc(m.body)}${zeit}</div>${ich ? "" : weg}</div>`;
+}
+function viewChat() {
+  return `<div class="verlauf" id="verlauf">${S.messages.length ? S.messages.map((m, i) => msgHtml(m, S.messages[i - 1])).join("") : '<div class="leer">Noch keine Nachrichten. Schreib die erste!</div>'}</div>
+    <form class="senden" data-form="chat"><textarea name="body" rows="1" placeholder="Nachricht an alle" maxlength="2000" aria-label="Nachricht"></textarea>
+    <button aria-label="Senden"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15201f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l16-8-6 16-3-7z"/></svg></button></form>`;
+}
+
+// ---------- Ranking ----------
+function boards() {
+  const past = S.meals.filter(m => m.day <= today());
+  const per = S.members.map(m => {
+    const mine = past.filter(x => cooks(x).includes(m.id));
+    const rs = mine.flatMap(x => ratingsOf(x.day));
+    return { m, gekocht: mine.length, n: rs.length, avg: avg(rs),
+      gegessen: S.rsvps.filter(r => r.user_id === m.id && r.coming && r.day <= today() && meal(r.day)).length,
+      bewertet: S.ratings.filter(r => r.user_id === m.id).length };
+  });
+  return {
+    beste: { label: "Beste Köche", titel: "Löffelkrone", leer: "Sobald die ersten Bewertungen da sind, steht hier der bestbewertete Koch.",
+      rows: per.filter(p => p.n).sort((a, b) => b.avg - a.avg || b.n - a.n).map(p => ({ m: p.m, big: num(p.avg, 2), small: `${p.n} Bewertung${p.n > 1 ? "en" : ""}`, sp: p.avg })) },
+    fleiss: { label: "Am häufigsten gekocht", titel: "Dauerbrenner am Herd", leer: "Noch hat niemand gekocht.",
+      rows: per.filter(p => p.gekocht).sort((a, b) => b.gekocht - a.gekocht || b.avg - a.avg).map(p => ({ m: p.m, big: p.gekocht + "×", small: "gekocht" })) },
+    gerichte: { label: "Beste Gerichte", titel: "Gericht des Jahres", leer: "Noch wurde kein Essen bewertet.",
+      rows: past.filter(x => ratingsOf(x.day).length).map(x => ({ x, a: avg(ratingsOf(x.day)), n: ratingsOf(x.day).length })).sort((a, b) => b.a - a.a || b.n - a.n).slice(0, 10)
+        .map(r => ({ m: member(r.x.cook1), name: r.x.title || "Essen ohne Namen", sub: `${esc(cookNames(r.x))}, ${fmt(r.x.day, { day: "numeric", month: "numeric", year: "2-digit" })}`, big: num(r.a, 2), small: `${r.n} Bewertung${r.n > 1 ? "en" : ""}`, sp: r.a, day: r.x.day })) },
+    esser: { label: "Treueste Esser", titel: "Stammgast", leer: "Noch keine Anmeldungen.",
+      rows: per.filter(p => p.gegessen).sort((a, b) => b.gegessen - a.gegessen).map(p => ({ m: p.m, big: p.gegessen + "×", small: "mitgegessen" })) },
+    kritiker: { label: "Fleißigste Bewerter", titel: "Chefkritiker", leer: "Noch keine Bewertungen.",
+      rows: per.filter(p => p.bewertet).sort((a, b) => b.bewertet - a.bewertet).map(p => ({ m: p.m, big: p.bewertet + "×", small: "bewertet" })) }
+  };
+}
+function viewRanking() {
+  const all = boards(), b = all[S.board], [first, ...rest] = b.rows;
+  const chips = `<div class="chips">${Object.entries(all).map(([k, v]) => `<button data-act="board" data-b="${k}" aria-pressed="${S.board === k}">${v.label}</button>`).join("")}</div>`;
+  if (!first) return chips + `<div class="karte leer">${b.leer}</div>`;
+  const tie = rest.length && rest[0].big === first.big && rest[0].small === first.small;
+  return chips + `<div class="sieger" ${first.day ? `data-act="open" data-day="${first.day}" role="button" tabindex="0"` : ""}>${avatar(first.m, "l")}<div><small>${b.titel}${tie ? " (geteilt)" : ""}</small><h3>${esc(first.name || first.m.name)}</h3>
+      <div class="wert">${first.sp ? spoons(first.sp) + " " : ""}<b>${first.big}</b> ${first.sp ? "Löffel im Schnitt, " : ""}${first.small}${first.sub ? `<br>${first.sub}` : ""}</div></div></div>
+    ${rest.length ? `<div class="karte">${rest.map((r, i) => `<${r.day ? `button data-act="open" data-day="${r.day}"` : "div"} class="zeile"><span class="platz">${i + 2}</span>${avatar(r.m)}
+      <span class="mitte"><b>${esc(r.name || r.m.name)}</b>${r.sub ? `<small>${r.sub}</small>` : r.sp ? `<small>${spoons(r.sp)}</small>` : ""}</span>
+      <span class="wert-r"><b>${r.big}</b>${r.small}</span></${r.day ? "button" : "div"}>`).join("")}</div>` : ""}
+    <p class="hinweis">Gezählt werden alle Freitage bis heute. Bei zwei Köchen zählt das Essen für beide.</p>`;
+}
+
+// ---------- Blätter: Essen-Detail und Profil ----------
+function viewSheet() {
+  return `<div class="blatt" data-act="zu-aussen"><div class="innen" role="dialog" aria-modal="true">${S.sheet.type === "meal" ? sheetMeal(S.sheet.day) : S.sheet.type === "kasse" ? sheetKasse() : sheetProfil()}</div></div>`;
+}
+function sheetMeal(day) {
+  const m = meal(day), leiste = `<div class="leiste"><span>${fmtLong(day)}</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>`;
+  if (!m) return leiste + `<div class="block">Für diesen Freitag ist niemand mehr eingetragen.</div>`;
+  const cook = isCook(m), future = day >= today(), rs = ratingsOf(day), ph = photosOf(day), mine = rs.find(r => r.user_id === S.me.id);
+  if (S.sheet.edit && cook) return leiste + `<h2 class="titel">Dein Essen</h2><form data-form="meal" data-day="${day}">
+      <label class="feld">Was gibt es?<input class="ein" name="title" maxlength="120" value="${esc(m.title)}" placeholder="z. B. Rinderrouladen mit Rotkohl"></label>
+      <label class="feld">Kurze Beschreibung<textarea class="ein" name="description" maxlength="2000" placeholder="Beilagen, vegetarische Variante, Hinweise …">${esc(m.description)}</textarea></label>
+      <label class="feld">Rezept (kannst du auch später nachtragen)<textarea class="ein" name="recipe" maxlength="20000" style="min-height:200px" placeholder="Zutaten und Zubereitung">${esc(m.recipe)}</textarea></label>
+      <label class="feld">Einkaufskosten gesamt in Euro (für die Clubkasse)<input class="ein" name="cost" inputmode="decimal" value="${m.cost == null ? "" : num(Number(m.cost), 2)}" placeholder="z. B. 86,40"></label>
+      <div class="reihe"><button class="btn senf">Speichern</button><button type="button" class="btn hell" data-act="edit" data-v="0">Abbrechen</button></div></form>`;
+  let h = leiste + `<h2 class="titel">${esc(m.title || "Gericht noch geheim")}</h2>
+    <div class="koch" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:600">${cooks(m).map(id => avatar(member(id), "s")).join("")}<span>${esc(cookNames(m))} ${future ? (cooks(m).length > 1 ? "kochen" : "kocht") : (cooks(m).length > 1 ? "haben gekocht" : "hat gekocht")}</span>
+      ${rs.length ? `<span style="margin-left:auto">${spoons(avg(rs))}<span class="schnitt">${num(avg(rs))}</span></span>` : ""}</div>
+    ${m.description ? `<p style="margin:10px 0 0">${esc(m.description)}</p>` : ""}`;
+  if (cook || (future && !m.cook2) || (future && S.me.is_admin)) h += `<div class="reihe">
+      ${cook ? `<button class="btn klein" data-act="edit" data-v="1">Gericht und Rezept bearbeiten</button>` : ""}
+      ${cook && future ? `<button class="btn klein rot" data-act="release" data-day="${day}">Als Koch austragen</button>` : ""}
+      ${!cook && future && !m.cook2 ? `<button class="btn klein hell" data-act="claim" data-day="${day}">Mitkochen (zu zweit)</button>` : ""}
+      ${!cook && future && S.me.is_admin ? cooks(m).map(id => `<button class="btn klein rot" data-act="release" data-day="${day}" data-who="${id}">${esc(member(id).name)} austragen</button>`).join("") : ""}</div>`;
+  if (future) h += `<div class="block"><h3>Anmeldung</h3>${rsvpBlock(day)}</div>`;
+  else {
+    const yes = rsvpsOf(day).filter(r => r.coming);
+    h += `<div class="block"><h3>${portions(day)} Portionen</h3><p style="margin:0;color:#3b4744">${yes.map(r => esc(member(r.user_id).name) + (r.guests ? ` (+${r.guests})` : "")).join(", ") || "–"}</p></div>`;
+  }
+  // Kosten
+  const sh = shares(m), my = sh?.map.get(S.me.id);
+  if (m.cost != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0"><b>${euro(cents(m.cost))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss.`}</p></div>`;
+  else if (cook && !rsvpOpen(day)) h += `<div class="block"><h3>Einkauf</h3><p>Trag ein, was du ausgegeben hast. Die App verteilt den Betrag auf alle Portionen.</p><button class="btn klein senf" data-act="edit" data-v="1">Einkaufskosten eintragen</button></div>`;
+  // Bewertung
+  if (day <= today()) {
+    h += `<div class="block"><h3>Bewertungen${rs.length ? ` (${rs.length})` : ""}</h3>`;
+    if (mayRate(m)) {
+      S.draft = S.draft || mine?.spoons || 0;
+      h += `<form data-form="rate" data-day="${day}"><p style="font-weight:600">${mine ? "Deine Bewertung ändern" : "Wie hat es dir geschmeckt?"}</p>
+        <div class="loeffel gross" id="wahl">${[1, 2, 3, 4, 5].map(i => `<button type="button" data-act="spoon" data-n="${i}" class="${i <= S.draft ? "" : "aus"}" aria-label="${i} Kochlöffel">${SPOON}</button>`).join("")}</div>
+        <label class="feld">Kommentar (freiwillig)<input class="ein" name="comment" maxlength="500" value="${esc(mine?.comment || "")}" placeholder="Was war besonders gut?"></label>
+        <div class="reihe"><button class="btn senf">${mine ? "Bewertung ändern" : "Bewertung abgeben"}</button></div></form>${rs.length ? '<hr style="border:0;border-top:1px solid var(--linie);margin:14px 0 4px">' : ""}`;
+    } else if (!cook) h += `<p style="color:var(--grau)">Bewerten kann, wer für diesen Freitag angemeldet war.</p>`;
+    h += rs.length ? rs.map(r => `<div class="stimme">${avatar(member(r.user_id), "s")}<div><b>${esc(member(r.user_id).name)}</b> ${spoons(r.spoons)}${r.comment ? `<p>${esc(r.comment)}</p>` : ""}</div></div>`).join("") : (mayRate(m) ? "" : `<p style="color:var(--grau);margin:0">Noch keine Bewertung.</p>`);
+    h += `</div>`;
+  }
+  // Rezept
+  h += `<div class="block"><h3>Rezept</h3>${m.recipe ? `<div class="rezept">${esc(m.recipe)}</div>` : `<p style="color:var(--grau);margin:0">${cook ? "Du hast noch kein Rezept eingetragen." : "Noch kein Rezept eingetragen."}</p>`}</div>`;
+  // Fotos
+  h += `<div class="block"><h3>Fotos</h3><div class="fotos">${ph.map(p => `<div class="f"><button data-act="bild" data-url="${esc(p.url)}" style="display:block;width:100%;height:100%"><img src="${esc(p.url)}" alt="Foto von ${esc(member(p.user_id).name)}" loading="lazy"></button>${p.user_id === S.me.id || S.me.is_admin ? `<button class="weg" data-act="fotoweg" data-id="${p.id}" aria-label="Foto löschen">×</button>` : ""}</div>`).join("")}
+    <label>Foto hinzufügen<input type="file" accept="image/*" multiple hidden data-day="${day}" id="fotoein"></label></div></div>`;
+  return h;
+}
+function sheetKasse() {
+  const bal = balances(), me = S.me.id, mine = bal.get(me) || 0, plan = settle(bal);
+  const meins = plan.filter(p => p.from === me || p.to === me), rest = plan.filter(p => p.from !== me && p.to !== me);
+  const zeile = p => `<div class="stimme" style="align-items:center">${avatar(member(p.from === me ? p.to : p.from), "s")}<div style="flex:1">${p.from === me ? `Du gibst <b>${esc(member(p.to).name)}</b>` : p.to === me ? `<b>${esc(member(p.from).name)}</b> gibt dir` : `<b>${esc(member(p.from).name)}</b> gibt <b>${esc(member(p.to).name)}</b>`} <span class="betrag">${euro(p.c)}</span>
+    ${p.from === me || p.to === me ? `<div class="reihe" style="margin-top:6px"><button class="btn klein ${p.from === me ? "senf" : "hell"}" data-act="zahl" data-from="${p.from}" data-to="${p.to}" data-c="${p.c}">${p.from === me ? "Als bezahlt eintragen" : "Als erhalten eintragen"}</button></div>` : ""}</div></div>`;
+  const offen = S.meals.filter(m => m.day <= today() && m.cost == null).length;
+  const zahlungen = [...S.payments].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 15);
+  return `<div class="leiste"><span>Clubkasse</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>
+    <div class="stand"><small>Dein Stand</small><b>${euroPlus(mine)}</b><small>${mine < 0 ? "Diesen Betrag schuldest du der Runde." : mine > 0 ? "Diesen Betrag bekommst du noch." : "Du bist ausgeglichen."}</small></div>
+    <div class="block"><h3>So gleicht ihr aus</h3>${plan.length ? meins.map(zeile).join("") + rest.map(zeile).join("") : `<p style="margin:0;color:var(--grau)">Alles ausgeglichen. Niemand schuldet etwas.</p>`}</div>
+    <div class="block"><h3>Alle Kontostände</h3>${[...bal].filter(([id, c]) => c || member(id).active).sort((a, b) => b[1] - a[1]).map(([id, c]) => `<div class="stimme" style="align-items:center">${avatar(member(id), "s")}<div style="flex:1"><b>${esc(member(id).name)}</b></div><span class="betrag ${c < 0 ? "minus" : c > 0 ? "plus" : ""}">${euroPlus(c)}</span></div>`).join("")}</div>
+    <div class="block"><h3>Letzte Zahlungen</h3>${zahlungen.length ? zahlungen.map(p => `<div class="stimme" style="align-items:center"><div style="flex:1"><b>${esc(member(p.from_user).name)}</b> an <b>${esc(member(p.to_user).name)}</b><br><small style="color:var(--grau)">${new Date(p.created_at).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })}</small></div><span class="betrag">${euro(cents(p.amount))}</span>
+      ${p.created_by === me || S.me.is_admin ? `<button class="btn klein rot" data-act="zahlweg" data-id="${p.id}" aria-label="Zahlung löschen">Löschen</button>` : ""}</div>`).join("") : `<p style="margin:0;color:var(--grau)">Noch keine Zahlungen eingetragen.</p>`}</div>
+    <p class="hinweis">Die Einkaufskosten eines Freitags werden nach Anmeldeschluss auf alle Portionen verteilt. Gäste zählen bei dem Mitglied, das sie mitbringt. Wer kocht, bekommt die Kosten gutgeschrieben, bei zwei Köchen je zur Hälfte.${offen ? ` Für ${offen} Essen fehlen noch die Einkaufskosten.` : ""}</p>`;
+}
+function sheetProfil() {
+  const admin = S.me.is_admin;
+  return `<div class="leiste"><span>Profil und Mitglieder</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>
+    <div class="block"><form data-form="name" style="display:flex;gap:12px;align-items:flex-end">${avatar(S.me, "l")}
+      <label class="feld" style="flex:1;margin:0">Dein Name<input class="ein" name="name" required minlength="2" maxlength="40" value="${esc(S.me.name)}"></label>
+      <button class="btn klein" style="min-height:48px">Speichern</button></form></div>
+    ${B.demo ? "" : `<div class="block"><h3>Erinnerungen</h3>${S.push === null
+      ? `<p style="margin:0;color:var(--grau)">Auf diesem Gerät sind Mitteilungen hier nicht möglich. Auf dem iPhone: die App zuerst über „Teilen“ zum Home-Bildschirm hinzufügen und von dort öffnen.</p>`
+      : `<p style="color:var(--grau);font-size:14.5px">Mittwochnachmittag, falls du dich noch nicht an- oder abgemeldet hast. Wenn du kochst, bekommst du Donnerstag früh die Zahl der Portionen.</p>
+        <button class="btn klein ${S.push ? "hell" : "senf"}" data-act="${S.push ? "pushaus" : "pushan"}">${S.push ? "Auf diesem Gerät ausschalten" : "Auf diesem Gerät einschalten"}</button>`}</div>`}
+    ${admin ? `<div class="block"><h3>Einladungscode</h3><p style="color:var(--grau);font-size:14.5px">Neue Mitglieder registrieren sich in der App und geben diesen Code ein.</p>
+      <form data-form="invite" style="display:flex;gap:10px"><input class="ein" style="margin:0" name="code" required minlength="4" value="${esc(S.invite ?? "")}" autocapitalize="characters"><button class="btn klein" style="min-height:48px">Ändern</button></form></div>` : ""}
+    <div class="block"><h3>${activeMembers().length} Mitglieder</h3>${S.members.map(m => `<div class="stimme" style="align-items:center">${avatar(m, "s")}<div style="flex:1"><b>${esc(m.name)}</b>${m.is_admin ? ' <small style="color:var(--emaille);font-weight:700">Admin</small>' : ""}${m.active ? "" : ' <small style="color:var(--tomate);font-weight:700">pausiert</small>'}
+      ${admin && m.id !== S.me.id ? `<div class="reihe" style="margin-top:6px;gap:6px">
+        <button class="btn klein hell" data-act="mset" data-id="${m.id}" data-k="active">${m.active ? "Pausieren" : "Aktivieren"}</button>
+        <button class="btn klein hell" data-act="mset" data-id="${m.id}" data-k="admin">${m.is_admin ? "Admin entziehen" : "Zum Admin machen"}</button>
+        <button class="btn klein hell" data-act="pw" data-id="${m.id}">Neues Passwort</button></div>
+        ${S.sheet.pw === m.id ? `<form data-form="pw" data-id="${m.id}" style="display:flex;gap:8px;margin-top:8px"><input class="ein" style="margin:0" name="pw" required minlength="8" placeholder="Neues Passwort (mind. 8 Zeichen)" autocomplete="off"><button class="btn klein senf" style="min-height:48px">Setzen</button></form>` : ""}` : ""}</div></div>`).join("")}</div>
+    <div class="reihe"><button class="btn rot voll" data-act="logout">${B.demo ? "Demo neu starten" : "Abmelden"}</button></div>`;
+}
+
+// ============================================================
+// Aktionen
+// ============================================================
+async function reload(draw = true) {
+  Object.assign(S, await B.loadAll());
+  S.me = S.members.find(m => m.id === S.me.id) || S.me;
+  if (draw) render();
+}
+const busy = new Set();
+async function run(key, fn, okMsg) {
+  if (busy.has(key)) return; busy.add(key);
+  try { await fn(); await reload(); if (okMsg) toast(okMsg); }
+  catch (e) { toast(e.message || "Das hat nicht geklappt.", true); try { await reload(); } catch { /* offline */ } }
+  finally { busy.delete(key); }
+}
+function closeSheet() { S.sheet = null; S.draft = 0; render(); }
+
+const ACT = {
+  tab(el) { S.tab = el.dataset.tab; render(); if (S.tab !== "chat") window.scrollTo(0, 0); },
+  profil() { S.sheet = { type: "profil" }; render(); if (S.me.is_admin && S.invite === null) B.getInvite().then(c => { S.invite = c; if (S.sheet?.type === "profil") render(); }).catch(() => {}); },
+  open(el) { S.sheet = { type: "meal", day: el.dataset.day }; S.draft = 0; render(); },
+  zu: closeSheet,
+  "zu-aussen"(el, ev) { if (ev.target === el) closeSheet(); },
+  mehr() { S.weeks += 12; render(); },
+  board(el) { S.board = el.dataset.b; render(); },
+  kasse() { S.sheet = { type: "kasse" }; render(); },
+  rsvp(el) {
+    const day = el.dataset.day, v = el.dataset.v === "1";
+    run("rsvp", () => B.setRsvp(day, v, v ? myRsvp(day)?.guests || 0 : 0), v ? "Du bist angemeldet." : "Du bist abgemeldet.");
+  },
+  gast(el) {
+    const day = el.dataset.day, g = Math.max(0, Math.min(5, (myRsvp(day)?.guests || 0) + +el.dataset.d));
+    run("rsvp", () => B.setRsvp(day, true, g), g ? `Du bringst ${g} ${g === 1 ? "Gast" : "Gäste"} mit.` : "Ohne Gäste.");
+  },
+  zahl(el) {
+    if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = `${euro(+el.dataset.c)} wirklich eintragen?`; return; }
+    run("zahl", () => B.addPayment(el.dataset.from, el.dataset.to, +el.dataset.c / 100), "Zahlung eingetragen.");
+  },
+  zahlweg(el) {
+    if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = "Wirklich?"; return; }
+    run("zahl", () => B.deletePayment(+el.dataset.id), "Zahlung gelöscht.");
+  },
+  async pushan() { try { await pushOn(); toast("Erinnerungen sind eingeschaltet."); } catch (e) { toast(e.message || "Das hat nicht geklappt.", true); } render(); },
+  async pushaus() { try { await pushOff(); toast("Erinnerungen sind ausgeschaltet."); } catch (e) { toast(e.message || "Das hat nicht geklappt.", true); } render(); },
+  pushspaeter() { store.set("kpt-push-spaeter", "1"); render(); },
+  claim(el) {
+    const day = el.dataset.day;
+    run("claim", async () => { await B.claim(day); S.sheet = { type: "meal", day, edit: true }; }, `Eingetragen: Du kochst am ${fmt(day, { day: "numeric", month: "long" })}.`);
+  },
+  release(el) {
+    if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = "Wirklich austragen?"; return; }
+    run("release", () => B.release(el.dataset.day, el.dataset.who), "Ausgetragen.");
+  },
+  edit(el) { S.sheet.edit = el.dataset.v === "1"; render(); },
+  spoon(el) { S.draft = +el.dataset.n; document.querySelectorAll("#wahl button").forEach(b => b.classList.toggle("aus", +b.dataset.n > S.draft)); },
+  bild(el) { const d = document.createElement("div"); d.className = "gross-bild"; d.innerHTML = `<img src="${esc(el.dataset.url)}" alt="">`; d.onclick = () => d.remove(); document.body.append(d); },
+  fotoweg(el) {
+    if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = "?"; el.style.background = "var(--tomate)"; return; }
+    const p = S.photos.find(x => String(x.id) === el.dataset.id); run("foto", () => B.deletePhoto(p), "Foto gelöscht.");
+  },
+  msgweg(el) {
+    const id = +el.dataset.id;
+    run("msg", async () => { await B.deleteMessage(id); S.messages = S.messages.filter(m => m.id !== id); });
+  },
+  mset(el) {
+    const m = member(el.dataset.id), k = el.dataset.k;
+    run("mset", () => B.setMember(m.id, k === "active" ? !m.active : m.active, k === "admin" ? !m.is_admin : m.is_admin));
+  },
+  pw(el) { S.sheet.pw = S.sheet.pw === el.dataset.id ? null : el.dataset.id; render(); },
+  authmode() { S.auth = S.auth === "neu" ? "login" : "neu"; render(); },
+  async logout() { try { if (S.push) await pushOff(); } catch { /* egal */ } await B.signOut(); location.reload(); }
+};
+document.addEventListener("click", ev => {
+  const el = ev.target.closest("[data-act]"); if (!el) return;
+  ACT[el.dataset.act]?.(el, ev);
+});
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && S.sheet) closeSheet();
+  if (ev.key === "Enter" && !ev.shiftKey && ev.target.matches("form.senden textarea")) { ev.preventDefault(); ev.target.form.requestSubmit(); }
+});
+
+const FORM = {
+  async auth(f) {
+    const r = await (S.auth === "neu" ? B.signUp : B.signIn).call(B, f.email.value.trim(), f.pw.value);
+    await enter(r);
+  },
+  async join(f) { await enter(await B.join(f.code.value, f.name.value)); },
+  async chat(f) {
+    const body = f.body.value.trim(); if (!body) return;
+    f.body.value = ""; await B.sendMessage(body);
+  },
+  async meal(f) {
+    const raw = f.cost.value.trim().replace(/\s|€/g, "").replace(",", "."), cost = raw === "" ? null : Number(raw);
+    if (cost !== null && !(cost >= 0 && cost <= 5000)) throw new Error("Bitte die Einkaufskosten als Betrag eingeben, z. B. 86,40.");
+    await B.saveMeal(f.dataset.day, { title: f.title.value.trim(), description: f.description.value.trim(), recipe: f.recipe.value.trim(), cost: cost === null ? null : Math.round(cost * 100) / 100 });
+    S.sheet.edit = false; await reload(); toast("Gespeichert.");
+  },
+  async rate(f) {
+    if (!S.draft) throw new Error("Bitte erst die Kochlöffel antippen.");
+    await B.rate(f.dataset.day, S.draft, f.comment.value.trim()); S.draft = 0; await reload(); toast("Danke für deine Bewertung!");
+  },
+  async name(f) { await B.updateName(f.name.value.trim()); await reload(); toast("Name gespeichert."); },
+  async invite(f) { await B.setInvite(f.code.value.trim()); S.invite = f.code.value.trim(); toast("Einladungscode geändert."); },
+  async pw(f) { await B.setPassword(f.dataset.id, f.pw.value); S.sheet.pw = null; render(); toast("Neues Passwort gesetzt. Bitte persönlich weitergeben."); }
+};
+document.addEventListener("submit", async ev => {
+  const f = ev.target.closest("[data-form]"); if (!f) return;
+  ev.preventDefault();
+  const btn = f.querySelector("button:not([type=button])"); if (btn?.disabled) return; if (btn) btn.disabled = true;
+  try { await FORM[f.dataset.form](f); }
+  catch (e) { toast(e.message || "Das hat nicht geklappt.", true); }
+  finally { if (btn?.isConnected) btn.disabled = false; }
+});
+
+// Fotos: vor dem Hochladen verkleinern
+async function shrink(file) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("Dieses Bild lässt sich nicht lesen.")); i.src = URL.createObjectURL(file); });
+  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src);
+  return new Promise(res => c.toBlob(res, "image/jpeg", 0.82));
+}
+document.addEventListener("change", ev => {
+  if (ev.target.id !== "fotoein" || !ev.target.files.length) return;
+  const files = [...ev.target.files].slice(0, 6), day = ev.target.dataset.day;
+  toast(files.length > 1 ? "Fotos werden hochgeladen …" : "Foto wird hochgeladen …");
+  run("upload", async () => { for (const f of files) await B.addPhoto(day, await shrink(f)); }, files.length > 1 ? "Fotos geteilt." : "Foto geteilt.");
+});
+
+// ---------- Push-Erinnerungen ----------
+const PUSH_OK = LIVE && !!CFG.VAPID_PUBLIC_KEY && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const b64 = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+async function pushInit() {
+  if (!PUSH_OK) return;
+  try {
+    const reg = await navigator.serviceWorker.register("sw.js");
+    const sub = await reg.pushManager.getSubscription();
+    S.push = !!sub;
+    if (sub) { const j = sub.toJSON(); B.savePush(j.endpoint, j.keys.p256dh, j.keys.auth).catch(() => {}); }  // Zuordnung auffrischen
+  } catch { S.push = null; }
+}
+async function pushOn() {
+  if (!PUSH_OK) throw new Error("Auf diesem Gerät sind Mitteilungen hier nicht möglich.");
+  if ((await Notification.requestPermission()) !== "granted") throw new Error("Mitteilungen sind für die App blockiert. Bitte in den Einstellungen des Handys erlauben.");
+  const reg = await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(CFG.VAPID_PUBLIC_KEY) });
+  const j = sub.toJSON(); await B.savePush(j.endpoint, j.keys.p256dh, j.keys.auth); S.push = true;
+}
+async function pushOff() {
+  const reg = await navigator.serviceWorker.getRegistration(), sub = reg && await reg.pushManager.getSubscription();
+  if (sub) { await B.dropPush(sub.endpoint); await sub.unsubscribe(); }
+  S.push = false;
+}
+
+// ---------- Live-Aktualisierung ----------
+const tippt = () => /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || "");
+function onMessage(m) {
+  if (S.messages.some(x => x.id === m.id)) return;
+  S.messages.push(m);
+  const v = $("#verlauf");
+  if (S.tab === "chat" && v && !S.sheet) {
+    if (S.messages.length === 1) v.innerHTML = "";
+    v.insertAdjacentHTML("beforeend", msgHtml(m, S.messages.at(-2))); scrollChat(); store.set("kpt-gelesen", String(m.id));
+  } else if (!tippt()) render();
+}
+let dataTimer;
+function onData(table) {
+  clearTimeout(dataTimer);
+  dataTimer = setTimeout(async () => {
+    try {
+      if (table === "messages") S.messages = await B.loadMessages();
+      await reload(false);
+      if (!S.me.active) return location.reload();
+      if (!tippt()) render();
+    } catch { /* nächster Versuch beim nächsten Ereignis */ }
+  }, 400);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.me && !S.gate) onData("messages"); });
+
+// ---------- Start ----------
+async function enter(r) {
+  if (!r.signedIn) { S.gate = "auth"; return render(); }
+  if (!r.profile) { S.gate = "join"; return render(); }
+  if (!r.profile.active) { await B.signOut(); S.gate = "auth"; render(); return toast("Dein Zugang ist pausiert. Bitte einen Admin ansprechen.", true); }
+  S.gate = null; S.me = r.profile;
+  const [, msgs] = await Promise.all([reload(false), B.loadMessages(), pushInit()]);
+  S.messages = msgs; render();
+  B.subscribe(onMessage, onData);
+}
+B.init().then(enter).catch(e => { $("#root").innerHTML = `<div class="laden" style="padding:24px;text-align:center">${esc(e.message || "Die App konnte nicht starten.")}</div>`; });
+</script>
+</body>
+</html>
