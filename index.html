@@ -154,9 +154,9 @@ h2.abschnitt{font-size:20px;font-weight:700;margin:22px 4px 10px}
 .stimme p{margin:2px 0 0;color:#3b4744}
 
 label.feld{display:block;font-weight:600;font-size:14.5px;margin:12px 0 0}
-input.ein,textarea.ein{display:block;width:100%;margin-top:5px;padding:12px;border:1.5px solid var(--linie);border-radius:12px;background:#fff;font-size:16px}
+input.ein,textarea.ein,select.ein{display:block;width:100%;margin-top:5px;padding:12px;border:1.5px solid var(--linie);border-radius:12px;background:#fff;font-size:16px}
 textarea.ein{min-height:92px;resize:vertical}
-input.ein:focus,textarea.ein:focus{outline:none;border-color:var(--emaille)}
+input.ein:focus,textarea.ein:focus,select.ein:focus{outline:none;border-color:var(--emaille)}
 .reihe{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 
 /* Chat */
@@ -419,6 +419,16 @@ function demoBackend() {
     async setInvite(c) { invite = c; },
     async setMember(id, active, admin) { Object.assign(members.find(m => m.id === id), { active, is_admin: admin }); },
     async setPassword() { },
+    async addPastMeal(day, c1, c2, title, attendees) {
+      if (db.meals.some(m => m.day === day)) throw new Error("Für diesen Freitag gibt es schon ein Essen.");
+      db.meals.push({ day, cook1: c1, cook2: c2 && c2 !== c1 ? c2 : null, title, description: "", recipe: "", cost: null });
+      [...new Set([...attendees, c1, c2].filter(Boolean))].forEach(u => db.rsvps.push({ day, user_id: u, coming: true, guests: 0, late: false }));
+    },
+    async setAttendance(day, who, coming) {
+      const r = db.rsvps.find(x => x.day === day && x.user_id === who);
+      if (r) Object.assign(r, { coming, guests: coming ? r.guests || 0 : 0 }); else db.rsvps.push({ day, user_id: who, coming, guests: 0, late: !softOpen(day) });
+    },
+    async deleteMeal(day) { db.meals = db.meals.filter(m => m.day !== day); for (const k of ["rsvps", "ratings", "photos"]) db[k] = db[k].filter(x => x.day !== day); },
     async signOut() { }
   };
 }
@@ -512,7 +522,10 @@ function liveBackend() {
     async getInvite() { return ok(await sb.rpc("get_invite_code")); },
     async setInvite(code) { ok(await sb.rpc("set_invite_code", { code })); },
     async setMember(id, active, admin) { ok(await sb.rpc("admin_set_member", { target: id, set_active: active, set_admin: admin })); },
-    async setPassword(id, pw) { ok(await sb.rpc("admin_set_password", { target: id, new_password: pw })); }
+    async setPassword(id, pw) { ok(await sb.rpc("admin_set_password", { target: id, new_password: pw })); },
+    async addPastMeal(day, c1, c2, title, attendees) { ok(await sb.rpc("admin_add_past_meal", { d: day, c1, c2: c2 || null, t: title, attendees })); },
+    async deleteMeal(day) { ok(await sb.rpc("admin_delete_meal", { d: day })); },
+    async setAttendance(day, who, coming) { ok(await sb.rpc("admin_set_attendance", { d: day, who, is_coming: coming })); }
   };
 }
 
@@ -631,7 +644,8 @@ function viewKalender() {
 // ---------- Essen (Archiv) ----------
 function viewEssen() {
   const past = S.meals.filter(m => m.day <= today()).sort((a, b) => b.day.localeCompare(a.day));
-  if (!past.length) return `<h2 class="abschnitt" style="margin-top:4px">Was es schon gab</h2><div class="karte leer">Hier erscheinen alle Essen mit Fotos, Rezepten und Bewertungen, sobald der erste Freitag vorbei ist.</div>`;
+  const nach = S.me.is_admin ? `<div class="reihe" style="justify-content:center"><button class="btn hell" data-act="nachtrag">Früheres Essen nachtragen</button></div>` : "";
+  if (!past.length) return `<h2 class="abschnitt" style="margin-top:4px">Was es schon gab</h2><div class="karte leer">Hier erscheinen alle Essen mit Fotos, Rezepten und Bewertungen, sobald der erste Freitag vorbei ist.</div>` + nach;
   return `<h2 class="abschnitt" style="margin-top:4px">Was es schon gab</h2><div class="karte">${past.map(m => {
     const r = ratingsOf(m.day), p = photosOf(m.day)[0];
     return `<button class="essen" data-act="open" data-day="${m.day}">
@@ -639,7 +653,7 @@ function viewEssen() {
       <span><h3>${esc(m.title || "Essen ohne Namen")}</h3><small>${fmt(m.day, { day: "numeric", month: "long", year: "numeric" })}, von ${esc(cookNames(m))}</small>
       <span style="display:block;margin-top:6px">${r.length ? `${spoons(avg(r))}<span class="schnitt">${num(avg(r))}</span>` : `<small>Noch keine Bewertung</small>`}</span>
       <small>${[m.recipe ? "Rezept" : "", photosOf(m.day).length ? `${photosOf(m.day).length} Foto${photosOf(m.day).length > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ")}</small></span></button>`;
-  }).join("")}</div>`;
+  }).join("")}</div>` + nach;
 }
 
 // ---------- Chat ----------
@@ -695,13 +709,14 @@ function viewRanking() {
 
 // ---------- Blätter: Essen-Detail und Profil ----------
 function viewSheet() {
-  return `<div class="blatt" data-act="zu-aussen"><div class="innen" role="dialog" aria-modal="true">${S.sheet.type === "meal" ? sheetMeal(S.sheet.day) : S.sheet.type === "kasse" ? sheetKasse() : sheetProfil()}</div></div>`;
+  return `<div class="blatt" data-act="zu-aussen"><div class="innen" role="dialog" aria-modal="true">${S.sheet.type === "meal" ? sheetMeal(S.sheet.day) : S.sheet.type === "kasse" ? sheetKasse() : S.sheet.type === "nachtrag" ? sheetNachtrag() : sheetProfil()}</div></div>`;
 }
 function sheetMeal(day) {
   const m = meal(day), leiste = `<div class="leiste"><span>${fmtLong(day)}</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>`;
   if (!m) return leiste + `<div class="block">Für diesen Freitag ist niemand mehr eingetragen.</div>`;
   const cook = isCook(m), future = day >= today(), rs = ratingsOf(day), ph = photosOf(day), mine = rs.find(r => r.user_id === S.me.id);
-  if (S.sheet.edit && cook) return leiste + `<h2 class="titel">Dein Essen</h2><form data-form="meal" data-day="${day}">
+  const admin = S.me.is_admin;
+  if (S.sheet.edit && (cook || admin)) return leiste + `<h2 class="titel">${cook ? "Dein Essen" : "Essen bearbeiten"}</h2><form data-form="meal" data-day="${day}">
       <label class="feld">Was gibt es?<input class="ein" name="title" maxlength="120" value="${esc(m.title)}" placeholder="z. B. Rinderrouladen mit Rotkohl"></label>
       <label class="feld">Kurze Beschreibung<textarea class="ein" name="description" maxlength="2000" placeholder="Beilagen, vegetarische Variante, Hinweise …">${esc(m.description)}</textarea></label>
       <label class="feld">Rezept (kannst du auch später nachtragen)<textarea class="ein" name="recipe" maxlength="20000" style="min-height:200px" placeholder="Zutaten und Zubereitung">${esc(m.recipe)}</textarea></label>
@@ -711,8 +726,9 @@ function sheetMeal(day) {
     <div class="koch" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:600">${cooks(m).map(id => avatar(member(id), "s")).join("")}<span>${esc(cookNames(m))} ${future ? (cooks(m).length > 1 ? "kochen" : "kocht") : (cooks(m).length > 1 ? "haben gekocht" : "hat gekocht")}</span>
       ${rs.length ? `<span style="margin-left:auto">${spoons(avg(rs))}<span class="schnitt">${num(avg(rs))}</span></span>` : ""}</div>
     ${m.description ? `<p style="margin:10px 0 0">${esc(m.description)}</p>` : ""}`;
-  if (cook || (future && !m.cook2) || (future && S.me.is_admin)) h += `<div class="reihe">
-      ${cook ? `<button class="btn klein" data-act="edit" data-v="1">Gericht und Rezept bearbeiten</button>` : ""}
+  if (cook || admin || (future && !m.cook2)) h += `<div class="reihe">
+      ${cook || admin ? `<button class="btn klein" data-act="edit" data-v="1">Gericht und Rezept bearbeiten</button>` : ""}
+      ${admin && day < today() ? `<button class="btn klein rot" data-act="mealweg" data-day="${day}">Essen löschen</button>` : ""}
       ${cook && future ? `<button class="btn klein rot" data-act="release" data-day="${day}">Als Koch austragen</button>` : ""}
       ${!cook && future && !m.cook2 ? `<button class="btn klein hell" data-act="claim" data-day="${day}">Mitkochen (zu zweit)</button>` : ""}
       ${!cook && future && S.me.is_admin ? cooks(m).map(id => `<button class="btn klein rot" data-act="release" data-day="${day}" data-who="${id}">${esc(member(id).name)} austragen</button>`).join("") : ""}</div>`;
@@ -721,6 +737,13 @@ function sheetMeal(day) {
     const yes = rsvpsOf(day).filter(r => r.coming);
     h += `<div class="block"><h3>${portions(day)} Portionen</h3><p style="margin:0;color:#3b4744">${yes.map(r => esc(member(r.user_id).name) + (r.guests ? ` (+${r.guests})` : "")).join(", ") || "–"}</p></div>`;
   }
+  // Admin: Teilnehmer von Hand eintragen
+  if (admin) h += `<div class="block"><h3>Teilnehmer von Hand eintragen</h3>${S.sheet.att
+    ? `<p style="color:var(--grau);font-size:14.5px">Tippe ein Mitglied an, um es für dieses Essen an- oder abzumelden. Das geht auch nach Anmeldeschluss. Nur wer dabei ist, kann bewerten und zahlt in der Kasse mit.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${S.members.filter(x => x.active || rsvpsOf(day).some(r => r.user_id === x.id && r.coming)).map(x => { const on = rsvpsOf(day).some(r => r.user_id === x.id && r.coming), koch = cooks(m).includes(x.id);
+        return `<button class="btn klein ${on ? "" : "hell"}" style="${on ? "background:var(--gruen)" : ""}" data-act="att" data-day="${day}" data-who="${x.id}" data-on="${on ? 1 : 0}" aria-pressed="${on}" ${koch ? "disabled" : ""}>${on ? "✓ " : ""}${esc(x.name)}${koch ? " (kocht)" : ""}</button>`; }).join("")}</div>
+      <div class="reihe"><button class="btn klein hell" data-act="attzu">Fertig</button></div>`
+    : `<p style="color:var(--grau);font-size:14.5px;margin-bottom:10px">Für Mitglieder, die sich nicht selbst angemeldet haben oder nach Anmeldeschluss dazukommen.</p><button class="btn klein hell" data-act="attauf">Teilnehmer ändern</button>`}</div>`;
   // Kosten
   const sh = shares(m), my = sh?.map.get(S.me.id);
   if (m.cost != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0"><b>${euro(cents(m.cost))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss am Donnerstagabend.`}</p></div>`;
@@ -745,6 +768,22 @@ function sheetMeal(day) {
   h += `<div class="block"><h3>Fotos</h3><div class="fotos">${ph.map(p => `<div class="f"><button data-act="bild" data-url="${esc(p.url)}" style="display:block;width:100%;height:100%"><img src="${esc(p.url)}" alt="Foto von ${esc(member(p.user_id).name)}" loading="lazy"></button>${p.user_id === S.me.id || S.me.is_admin ? `<button class="weg" data-act="fotoweg" data-id="${p.id}" aria-label="Foto löschen">×</button>` : ""}</div>`).join("")}
     <label>Foto hinzufügen<input type="file" accept="image/*" multiple hidden data-day="${day}" id="fotoein"></label></div></div>`;
   return h;
+}
+function sheetNachtrag() {
+  const fr = []; let d = addDays(nextFriday(), -7);
+  for (let i = 0; i < 156; i++, d = addDays(d, -7)) if (!meal(d) && d < today()) fr.push(d);
+  const wahl = (name, leer) => `<select class="ein" name="${name}" ${leer ? "" : "required"}><option value="">${leer || "Bitte wählen"}</option>${S.members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select>`;
+  return `<div class="leiste"><span>Früheres Essen nachtragen</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>
+    <form data-form="nachtrag">
+      <label class="feld">Welcher Freitag?<select class="ein" name="day" required><option value="">Bitte wählen</option>${fr.map(x => `<option value="${x}">${fmt(x, { day: "numeric", month: "long", year: "numeric" })}</option>`).join("")}</select></label>
+      <label class="feld">Wer hat gekocht?${wahl("c1")}</label>
+      <label class="feld">Zweiter Koch (falls zu zweit)${wahl("c2", "Niemand")}</label>
+      <label class="feld">Was gab es?<input class="ein" name="title" maxlength="120" placeholder="z. B. Rinderrouladen mit Rotkohl"></label>
+      <div class="block"><h3>Wer hat mitgegessen?</h3><p style="color:var(--grau);font-size:14.5px">Nur wer hier angehakt ist, kann das Essen nachträglich bewerten. Die Köche zählen automatisch dazu.</p>
+        <div class="reihe" style="margin:0 0 8px"><button type="button" class="btn klein hell" data-act="alle">Alle auswählen</button></div>
+        ${S.members.map(m => `<label style="display:flex;gap:10px;align-items:center;padding:7px 0;font-weight:500"><input type="checkbox" name="wer" value="${m.id}" style="width:22px;height:22px">${esc(m.name)}</label>`).join("")}</div>
+      <p class="hinweis">Rezept, Beschreibung, Fotos und Einkaufskosten trägst du danach beim Essen ein. Gäste lassen sich bei nachgetragenen Essen nicht erfassen.</p>
+      <div class="reihe"><button class="btn senf voll">Essen nachtragen</button></div></form>`;
 }
 function sheetKasse() {
   const bal = balances(), me = S.me.id, mine = bal.get(me) || 0, plan = settle(bal);
@@ -806,6 +845,15 @@ const ACT = {
   zu: closeSheet,
   "zu-aussen"(el, ev) { if (ev.target === el) closeSheet(); },
   mehr() { S.weeks += 12; render(); },
+  nachtrag() { S.sheet = { type: "nachtrag" }; render(); },
+  attauf() { S.sheet.att = true; render(); },
+  attzu() { S.sheet.att = false; render(); },
+  att(el) { run("att", () => B.setAttendance(el.dataset.day, el.dataset.who, el.dataset.on !== "1")); },
+  alle() { const b = [...document.querySelectorAll('input[name="wer"]')], an = b.some(x => !x.checked); b.forEach(x => (x.checked = an)); },
+  mealweg(el) {
+    if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = "Mit allen Bewertungen löschen?"; return; }
+    const day = el.dataset.day; run("mealweg", async () => { await B.deleteMeal(day); S.sheet = null; }, "Essen gelöscht.");
+  },
   board(el) { S.board = el.dataset.b; render(); },
   kasse() { S.sheet = { type: "kasse" }; render(); },
   rsvp(el) {
@@ -882,6 +930,12 @@ const FORM = {
   async rate(f) {
     if (!S.draft) throw new Error("Bitte erst die Kochlöffel antippen.");
     await B.rate(f.dataset.day, S.draft, f.comment.value.trim()); S.draft = 0; await reload(); toast("Danke für deine Bewertung!");
+  },
+  async nachtrag(f) {
+    const day = f.day.value, wer = [...f.querySelectorAll('input[name="wer"]:checked')].map(x => x.value);
+    if (f.c2.value && f.c2.value === f.c1.value) throw new Error("Bitte zwei verschiedene Köche auswählen.");
+    await B.addPastMeal(day, f.c1.value, f.c2.value || null, f.title.value.trim(), wer);
+    S.sheet = { type: "meal", day, edit: true }; await reload(); toast("Essen nachgetragen. Jetzt Rezept und Kosten ergänzen.");
   },
   async name(f) { await B.updateName(f.name.value.trim()); await reload(); toast("Name gespeichert."); },
   async invite(f) { await B.setInvite(f.code.value.trim()); S.invite = f.code.value.trim(); toast("Einladungscode geändert."); },
