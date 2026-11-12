@@ -87,7 +87,7 @@ nav.tabs .dot{position:absolute;top:4px;left:calc(50% + 8px);width:9px;height:9p
 .rsvp .btn[aria-pressed="true"].ja{background:var(--gruen);color:#fff;box-shadow:none}
 .rsvp .btn[aria-pressed="true"].nein{background:var(--tomate);color:#fff;box-shadow:none}
 .frist{font-size:13.5px;color:var(--grau);margin:10px 0 0}
-.frist.zu{color:var(--tomate);font-weight:600}
+.frist.dicht{color:var(--tomate);font-weight:600}
 details.wer{margin-top:12px;font-size:14.5px}
 details.wer summary{cursor:pointer;font-weight:700;color:var(--emaille);list-style:none}
 details.wer summary::-webkit-details-marker{display:none}
@@ -190,7 +190,8 @@ form.senden button{width:46px;height:46px;border-radius:50%;background:var(--sen
 .hinweis{font-size:13.5px;color:var(--grau);margin:10px 6px}
 
 /* Anmelden */
-.tor{min-height:100dvh;background:var(--emaille);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:28px 22px}
+.tor{min-height:100dvh;background:var(--emaille);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:28px 22px;align-items:center}
+.tor > *{width:100%;max-width:460px}
 .tor h1{font-size:64px;font-weight:800;color:var(--senf);letter-spacing:.01em}
 .tor p.lang{font:500 20px/1.2 var(--display);margin:6px 0 26px}
 .tor form{background:var(--papier);color:var(--tinte);border-radius:18px;padding:18px}
@@ -562,7 +563,7 @@ function rsvpBlock(day) {
     ${open && mine?.coming ? `<div class="gaeste"><span>Gäste mitbringen</span>
       <button data-act="gast" data-day="${day}" data-d="-1" ${g ? "" : "disabled"} aria-label="Ein Gast weniger">−</button><b aria-live="polite">${g}</b>
       <button data-act="gast" data-day="${day}" data-d="1" ${g < 5 ? "" : "disabled"} aria-label="Ein Gast mehr">+</button></div>` : ""}
-    <p class="frist ${open ? "" : "zu"}">${open ? `An- und Abmelden bis Mittwoch, ${fmtFrist(day)}, 23:59 Uhr` : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}`}</p>
+    <p class="frist ${open ? "" : "dicht"}">${open ? `An- und Abmelden bis Mittwoch, ${fmtFrist(day)}, 23:59 Uhr` : `Anmeldung geschlossen${cook ? "" : mine ? (mine.coming ? " – du bist dabei" : " – du bist abgemeldet") : " – du hast nicht geantwortet"}`}</p>
     <details class="wer"><summary>Wer kommt</summary><dl class="namen">
       <dt>Dabei (${yes.length})</dt><dd>${names(yes)}</dd><dt>Abgemeldet (${no.length})</dt><dd>${names(no)}</dd>
       ${open ? `<dt>Ohne Antwort (${offen.length})</dt><dd>${names(offen)}</dd>` : ""}</dl></details>`;
