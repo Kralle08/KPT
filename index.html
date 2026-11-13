@@ -443,6 +443,7 @@ function demoBackend() {
     async addPhoto(day, blob) { db.photos.push({ id: "p" + Date.now(), day, user_id: "me", url: URL.createObjectURL(blob), created_at: new Date().toISOString() }); },
     async deletePhoto(p) { db.photos = db.photos.filter(x => x.id !== p.id); },
     async updateName(name) { members[0].name = name; },
+    async setNotify(k, v) { members[0][k] = v; },
     getInvite: () => ok(invite),
     async setInvite(c) { invite = c; },
     async setMember(id, active, admin) { Object.assign(members.find(m => m.id === id), { active, is_admin: admin }); },
@@ -549,6 +550,7 @@ function liveBackend() {
     },
     async deletePhoto(p) { ok(await sb.from("photos").delete().eq("id", p.id)); await sb.storage.from("fotos").remove([p.path]); },
     async updateName(name) { ok(await sb.from("profiles").update({ name }).eq("id", uid)); },
+    async setNotify(k, v) { ok(await sb.from("profiles").update({ [k]: v }).eq("id", uid)); },
     async getInvite() { return ok(await sb.rpc("get_invite_code")); },
     async setInvite(code) { ok(await sb.rpc("set_invite_code", { code })); },
     async setMember(id, active, admin) { ok(await sb.rpc("admin_set_member", { target: id, set_active: active, set_admin: admin })); },
@@ -643,7 +645,7 @@ function viewStart() {
       <hr class="riss"><button class="btn senf voll" data-act="claim" data-day="${day}">Ich koche am ${fmt(day, { day: "numeric", month: "numeric" })}</button></section>`;
   const offen = S.meals.filter(x => x.day <= today() && mayRate(x) && !S.ratings.some(r => r.day === x.day && r.user_id === S.me.id)).sort((a, b) => b.day.localeCompare(a.day)).slice(0, 3);
   const meine = S.meals.filter(x => x.day > day && isCook(x)).sort((a, b) => a.day.localeCompare(b.day));
-  const tipp = S.push === false && store.get("kpt-push-spaeter") !== "1" ? `<div class="tipp"><p><b>Mittwochs erinnert werden?</b><br>Du bekommst eine Mitteilung, wenn du dich noch nicht an- oder abgemeldet hast.</p>
+  const tipp = S.push === false && store.get("kpt-push-spaeter") !== "1" ? `<div class="tipp"><p><b>Mitteilungen einschalten?</b><br>Erinnerungen zum Freitag und neue Chatnachrichten. Was genau, stellst du im Profil ein.</p>
       <div style="display:grid;gap:6px"><button class="btn klein senf" data-act="pushan">Einschalten</button><button class="btn klein hell" data-act="pushspaeter">Nicht jetzt</button></div></div>` : "";
   return tipp + bon
     + (offen.length ? `<h2 class="abschnitt">Noch zu bewerten</h2><div class="karte">${offen.map(x => `<button class="zeile" data-act="open" data-day="${x.day}">
@@ -860,10 +862,17 @@ function sheetProfil() {
       if (today() < goldStart()) return `<p style="margin:0;color:var(--grau)">Ab den Essen im Januar 2027 hat jedes Mitglied einen goldenen Löffel pro Kalenderjahr. Er zählt im Ranking wie 10 Kochlöffel und braucht eine Begründung.</p>`;
       return g ? `<p style="margin:0">${GOLD_SPOON.replace("<svg", '<svg style="width:16px;height:22px;vertical-align:middle"')} Für ${y} vergeben an <b>${esc(cookNames(meal(g.day)) || "")}</b> für ${esc(meal(g.day)?.title || "das Essen")} am ${fmt(g.day, { day: "numeric", month: "long" })}.</p>`
         : `<p style="margin:0">${GOLD_SPOON.replace("<svg", '<svg style="width:16px;height:22px;vertical-align:middle"')} Dein goldener Löffel für ${y} ist <b>noch frei</b>. Du kannst ihn bis zum Donnerstag nach einem Essen vergeben.</p>`; })()}</div>
-    ${B.demo ? "" : `<div class="block"><h3>Erinnerungen</h3>${S.push === null
-      ? `<p style="margin:0;color:var(--grau)">Auf diesem Gerät sind Mitteilungen hier nicht möglich. Auf dem iPhone: die App zuerst über „Teilen“ zum Home-Bildschirm hinzufügen und von dort öffnen.</p>`
-      : `<p style="color:var(--grau);font-size:14.5px">Mittwochnachmittag, falls du dich noch nicht an- oder abgemeldet hast. Wenn du kochst, bekommst du Donnerstag früh die Zahl der Portionen und Donnerstagabend den Endstand mit allen Nachmeldungen.</p>
-        <button class="btn klein ${S.push ? "hell" : "senf"}" data-act="${S.push ? "pushaus" : "pushan"}">${S.push ? "Auf diesem Gerät ausschalten" : "Auf diesem Gerät einschalten"}</button>`}</div>`}
+    <div class="block"><h3>Mitteilungen</h3>
+      ${B.demo ? "" : S.push === null
+        ? `<p style="margin:0 0 12px;color:var(--grau)">Auf diesem Gerät sind Mitteilungen hier nicht möglich. Auf dem iPhone: die App zuerst über „Teilen“ zum Home-Bildschirm hinzufügen und von dort öffnen.</p>`
+        : `<div class="reihe" style="margin:0 0 12px"><button class="btn klein ${S.push ? "hell" : "senf"}" data-act="${S.push ? "pushaus" : "pushan"}">${S.push ? "Auf diesem Gerät ausschalten" : "Auf diesem Gerät einschalten"}</button></div>`}
+      <p style="color:var(--grau);font-size:14.5px;margin:0 0 4px">Was möchtest du bekommen?</p>
+      ${[["notify_friday", "Erinnerungen zum Freitag", "Mittwoch 15 Uhr, falls du noch nicht geantwortet hast. Als Koch: Donnerstag früh die Portionen, abends den Endstand."],
+         ["notify_chat", "Neue Chatnachrichten", "Gebündelt, wenn mehrere kurz hintereinander schreiben."],
+         ["notify_photos", "Neue Fotos", "Wenn jemand Fotos zu einem Essen teilt."]].map(([k, t, d]) => `
+        <label style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--linie);cursor:pointer">
+          <input type="checkbox" data-notify="${k}" ${S.me[k] !== false && (k !== "notify_photos" || S.me[k]) ? "checked" : ""} style="width:22px;height:22px;margin-top:2px;flex:none;accent-color:var(--emaille)">
+          <span><b>${t}</b><br><small style="color:var(--grau)">${d}</small></span></label>`).join("")}</div>
     ${admin ? `<div class="block"><h3>Einladungscode</h3><p style="color:var(--grau);font-size:14.5px">Neue Mitglieder registrieren sich in der App und geben diesen Code ein.</p>
       <form data-form="invite" style="display:flex;gap:10px"><input class="ein" style="margin:0" name="code" required minlength="4" value="${esc(S.invite ?? "")}" autocapitalize="characters"><button class="btn klein" style="min-height:48px">Ändern</button></form></div>` : ""}
     <div class="block"><h3>${activeMembers().length} Mitglieder</h3>${S.members.map(m => `<div class="stimme" style="align-items:center">${avatar(m, "s")}<div style="flex:1"><b>${esc(m.name)}</b>${m.is_admin ? ' <small style="color:var(--emaille);font-weight:700">Admin</small>' : ""}${m.active ? "" : ' <small style="color:var(--tomate);font-weight:700">pausiert</small>'}
@@ -1026,6 +1035,8 @@ async function shrink(file) {
   return new Promise(res => c.toBlob(res, "image/jpeg", 0.82));
 }
 document.addEventListener("change", ev => {
+  const k = ev.target.dataset?.notify;
+  if (k) { const v = ev.target.checked; run("notify", () => B.setNotify(k, v), v ? "Eingeschaltet." : "Ausgeschaltet."); return; }
   if (ev.target.id !== "fotoein" || !ev.target.files.length) return;
   const files = [...ev.target.files].slice(0, 6), day = ev.target.dataset.day;
   toast(files.length > 1 ? "Fotos werden hochgeladen …" : "Foto wird hochgeladen …");

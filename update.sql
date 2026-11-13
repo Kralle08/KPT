@@ -1,7 +1,8 @@
 -- KPT – Update vom 12.11.2026 (Stand: Nachmelden bis Donnerstag 18 Uhr, Gäste bis Freitag 12 Uhr,
 -- Bewerten ab Freitag 12:30 Uhr,
 -- frühere Essen nachtragen, Teilnehmer von Hand eintragen,
--- getrennte Einkaufsbeträge bei zwei Köchen, goldener Löffel ab 2027). Einmal im Supabase "SQL Editor" ausführen.
+-- getrennte Einkaufsbeträge bei zwei Köchen, goldener Löffel ab 2027,
+-- Mitteilungen über Supabase). Einmal im Supabase "SQL Editor" ausführen.
 -- Bringt jede frühere Fassung der Datenbank auf den aktuellen Stand; mehrfaches Ausführen schadet nicht.
 
 alter table public.rsvps add column if not exists late boolean not null default false;
@@ -234,3 +235,216 @@ drop trigger if exists ratings_gold on public.ratings;
 create trigger ratings_gold before insert or update on public.ratings
   for each row execute function public.ratings_gold();
 
+-- ---------- Mitteilungen --------------------------------------------
+-- Jede Minute prüft die Datenbank, ob etwas zu verschicken ist (Erinnerungen,
+-- neue Chatnachrichten, neue Fotos), und gibt es an die Supabase-Funktion "push".
+
+create extension if not exists pg_net with schema extensions;
+create extension if not exists pg_cron with schema pg_catalog;
+
+-- Was jedes Mitglied bekommen möchte
+alter table public.profiles add column if not exists notify_friday boolean not null default true;
+alter table public.profiles add column if not exists notify_chat   boolean not null default true;
+alter table public.profiles add column if not exists notify_photos boolean not null default false;
+grant update (notify_friday, notify_chat, notify_photos) on public.profiles to authenticated;
+
+-- Adresse und Passwort der Funktion "push" (wird einmal von Hand eingetragen)
+create table if not exists public.push_config (
+  id           int primary key default 1 check (id = 1),
+  function_url text,
+  secret       text
+);
+insert into public.push_config (id) values (1) on conflict do nothing;
+
+-- Bis wohin Chat und Fotos schon gemeldet sind
+create table if not exists public.push_state (
+  id              int primary key default 1 check (id = 1),
+  last_message_id bigint not null default 0,
+  last_photo_at   timestamptz not null default now()
+);
+insert into public.push_state (id, last_message_id, last_photo_at)
+select 1, coalesce((select max(id) from public.messages), 0), now()
+on conflict do nothing;
+
+-- Welche Erinnerungen schon verschickt wurden (damit nichts doppelt kommt)
+create table if not exists public.push_log (
+  key     text primary key,
+  sent_at timestamptz not null default now()
+);
+
+alter table public.push_config enable row level security;
+alter table public.push_state  enable row level security;
+alter table public.push_log    enable row level security;
+revoke all on public.push_config, public.push_state, public.push_log from anon, authenticated;
+
+-- Merkt sich eine Erinnerung als verschickt; liefert false, wenn sie schon verschickt war
+create or replace function public.kpt_claim(k text) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into push_log (key) values (k) on conflict do nothing;
+  return found;
+end $$;
+
+-- Deutsche Zeit (für Tests lässt sie sich über "kpt.jetzt" vorgeben)
+create or replace function public.kpt_now() returns timestamp
+language sql stable as $$
+  select coalesce(nullif(current_setting('kpt.jetzt', true), '')::timestamp, now() at time zone 'Europe/Berlin');
+$$;
+
+-- Ermittelt, wer jetzt welche Mitteilung bekommt, und merkt sich das Verschickte
+create or replace function public.kpt_due_messages()
+returns table (user_id uuid, title text, body text, tag text)
+language plpgsql security definer set search_path = public as $$
+declare
+  n       timestamp := public.kpt_now();
+  fri     date := n::date + ((5 - extract(isodow from n)::int + 7) % 7);
+  m       meals;
+  koeche  text;
+  portion int;
+  mitgl   int;
+  gaeste  int;
+  st      push_state;
+  last_id bigint;
+  last_ph timestamptz;
+begin
+  select * into m from meals where day = fri;
+  if found then
+    select string_agg(p.name, ' & ' order by p.id = m.cook2) into koeche
+      from profiles p where p.id in (m.cook1, m.cook2);
+    select count(*), coalesce(sum(r.guests), 0) into mitgl, gaeste from rsvps r where r.day = fri and r.coming;
+    portion := mitgl + gaeste;
+
+    -- Mittwoch ab 15 Uhr: an alle, die noch nicht geantwortet haben
+    if extract(isodow from n) = 3 and n::time >= time '15:00'
+       and public.kpt_claim('mittwoch:' || fri) then
+      return query
+        select p.id, 'KPT: Isst du am Freitag mit?'::text,
+               (case when m.title <> '' then 'Es gibt ' || m.title || ', ' else '' end)
+               || koeche || case when m.cook2 is null then ' kocht' else ' kochen' end
+               || '. Bitte bis heute 23:59 Uhr an- oder abmelden.',
+               'kpt-anmeldung'::text
+          from profiles p
+         where p.active and p.notify_friday and p.id not in (m.cook1, coalesce(m.cook2, m.cook1))
+           and not exists (select 1 from rsvps r where r.day = fri and r.user_id = p.id);
+    end if;
+
+    -- Donnerstag 7 bis 18 Uhr: Portionen an die Köche
+    if extract(isodow from n) = 4 and n::time >= time '07:00' and n::time < time '18:00'
+       and public.kpt_claim('donnerstag:' || fri) then
+      return query
+        select p.id, ('KPT: Einkaufen für ' || portion || case when portion = 1 then ' Portion' else ' Portionen' end)::text,
+               'Für Freitag ' || case when mitgl = 1 and gaeste = 0 then 'ist ' else 'sind ' end || mitgl
+               || case when mitgl = 1 then ' Mitglied' else ' Mitglieder' end
+               || case when gaeste > 0 then ' und ' || gaeste || case when gaeste = 1 then ' Gast' else ' Gäste' end else '' end
+               || ' angemeldet. Nachmelden geht noch bis heute 18 Uhr, den Endstand bekommst du heute Abend.',
+               'kpt-einkauf'::text
+          from profiles p
+         where p.active and p.notify_friday and p.id in (m.cook1, coalesce(m.cook2, m.cook1));
+    end if;
+
+    -- Donnerstag ab 18:05 Uhr: Endstand an die Köche
+    if extract(isodow from n) = 4 and n::time >= time '18:05'
+       and public.kpt_claim('donnerstagabend:' || fri) then
+      return query
+        select p.id, ('KPT: Endstand für Freitag: ' || portion || case when portion = 1 then ' Portion' else ' Portionen' end)::text,
+               coalesce('Nach Mittwoch dazugekommen: ' || (
+                  select string_agg(q.name || case when r.guests > 0 then ' (+' || r.guests || ')' else '' end, ', ' order by q.name)
+                    from rsvps r join profiles q on q.id = r.user_id
+                   where r.day = fri and r.coming and r.late and r.user_id not in (m.cook1, coalesce(m.cook2, m.cook1))) || '. ',
+                  'Seit Mittwoch hat sich nichts geändert. ')
+               || 'Die Anmeldung ist geschlossen, nur die Zahl der Gäste lässt sich noch bis Freitag 12 Uhr ändern.',
+               'kpt-endstand'::text
+          from profiles p
+         where p.active and p.notify_friday and p.id in (m.cook1, coalesce(m.cook2, m.cook1));
+    end if;
+  end if;
+
+  select * into st from push_state where id = 1 for update;
+
+  -- Chat: gebündelt, sobald eine Minute Ruhe ist (spätestens nach 4 Minuten)
+  if exists (select 1 from messages x where x.id > st.last_message_id
+              having max(x.created_at at time zone 'Europe/Berlin') < n - interval '1 minute'
+                  or min(x.created_at at time zone 'Europe/Berlin') < n - interval '4 minutes') then
+    select max(x.id) into last_id from messages x where x.id > st.last_message_id;
+    return query
+      select p.id,
+             case when count(*) = 1 then 'KPT-Chat: ' || min(a.name)
+                  else 'KPT-Chat: ' || count(*) || ' neue Nachrichten' end,
+             case when count(*) = 1 then left(min(x.body), 160)
+                  else 'Von ' || string_agg(distinct a.name, ', ') || ': ' || left((array_agg(x.body order by x.id desc))[1], 120) end,
+             'kpt-chat'::text
+        from profiles p
+        join messages x on x.id > st.last_message_id and x.id <= last_id and x.user_id <> p.id
+        join profiles a on a.id = x.user_id
+       where p.active and p.notify_chat
+       group by p.id;
+    update push_state set last_message_id = last_id where id = 1;
+  end if;
+
+  -- Fotos: ebenso gebündelt
+  if exists (select 1 from photos f where f.created_at > st.last_photo_at
+              having max(f.created_at at time zone 'Europe/Berlin') < n - interval '1 minute'
+                  or min(f.created_at at time zone 'Europe/Berlin') < n - interval '4 minutes') then
+    select max(f.created_at) into last_ph from photos f where f.created_at > st.last_photo_at;
+    return query
+      select p.id,
+             ('KPT: ' || count(*) || case when count(*) = 1 then ' neues Foto' else ' neue Fotos' end)::text,
+             'von ' || string_agg(distinct a.name, ', ') || ' zu '
+               || string_agg(distinct coalesce(nullif(e.title, ''), 'dem Essen vom ' || to_char(e.day, 'DD.MM.')), ', '),
+             'kpt-fotos'::text
+        from profiles p
+        join photos f on f.created_at > st.last_photo_at and f.created_at <= last_ph and f.user_id <> p.id
+        join profiles a on a.id = f.user_id
+        join meals e on e.day = f.day
+       where p.active and p.notify_photos
+       group by p.id;
+    update push_state set last_photo_at = last_ph where id = 1;
+  end if;
+end $$;
+
+-- Gibt Mitteilungen an die Funktion "push" weiter
+create or replace function public.kpt_send(msgs jsonb) returns int
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  c       push_config;
+  payload jsonb;
+begin
+  select * into c from push_config where id = 1;
+  if coalesce(c.function_url, '') = '' or coalesce(c.secret, '') = '' then return 0; end if;
+  select jsonb_agg(jsonb_build_object('endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth,
+                                      'title', x->>'title', 'body', x->>'body', 'tag', x->>'tag'))
+    into payload
+    from jsonb_array_elements(msgs) x
+    join push_subscriptions s on s.user_id = (x->>'user_id')::uuid;
+  if payload is null then return 0; end if;
+  perform net.http_post(
+    url     := c.function_url,
+    body    := jsonb_build_object('messages', payload),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-kpt-secret', c.secret),
+    timeout_milliseconds := 30000);
+  return jsonb_array_length(payload);
+end $$;
+
+-- Läuft jede Minute
+create or replace function public.kpt_tick() returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  c push_config;
+begin
+  select * into c from push_config where id = 1;
+  if coalesce(c.function_url, '') = '' or coalesce(c.secret, '') = '' then return 0; end if;   -- noch nicht eingerichtet
+  return public.kpt_send((select jsonb_agg(to_jsonb(d)) from public.kpt_due_messages() d));
+end $$;
+
+-- Probe-Mitteilung an alle Geräte (im SQL Editor: select public.kpt_test_push();)
+create or replace function public.kpt_test_push() returns int
+language sql security definer set search_path = public as $$
+  select public.kpt_send((select jsonb_agg(jsonb_build_object('user_id', p.id, 'title', 'KPT: Probe-Mitteilung',
+                                                             'body', 'Die Mitteilungen funktionieren auf diesem Gerät.', 'tag', 'kpt-test'))
+                            from profiles p where p.active));
+$$;
+
+revoke execute on function public.kpt_claim(text), public.kpt_due_messages(), public.kpt_send(jsonb), public.kpt_tick(), public.kpt_test_push()
+  from public, anon, authenticated;
+
+select cron.schedule('kpt-mitteilungen', '* * * * *', 'select public.kpt_tick()');
