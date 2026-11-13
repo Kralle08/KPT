@@ -218,6 +218,14 @@ form.senden button{width:46px;height:46px;border-radius:50%;background:var(--sen
 .betrag.minus{color:var(--tomate)} .betrag.plus{color:var(--gruen)}
 .tipp{background:#fff;border-radius:16px;box-shadow:0 0 0 1px var(--linie);padding:14px;margin:0 0 18px;display:flex;gap:12px;align-items:center}
 .tipp p{margin:0;flex:1;font-size:14.5px}
+.gold{background:linear-gradient(135deg,#fff6d6,#fdeaa8);box-shadow:0 0 0 1.5px #e3b93f;border-radius:14px;padding:12px 14px;margin:10px 0}
+.gold b{color:#7a5a00}
+.gold p{margin:6px 0 0;font-style:italic;color:#4b3d12}
+.goldmark{display:inline-flex;align-items:center;gap:4px;font:700 13.5px var(--display);color:#7a5a00;background:#fdeaa8;border-radius:99px;padding:3px 9px 3px 5px;vertical-align:middle}
+.goldmark svg{width:14px;height:19px}
+.goldwahl{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin-top:14px;padding:12px 14px;border-radius:14px;box-shadow:inset 0 0 0 1.5px #e3b93f;background:#fffbea}
+.goldwahl[aria-pressed="true"]{background:linear-gradient(135deg,#fff6d6,#fdeaa8)}
+.goldwahl svg{width:26px;height:35px;flex:none}
 .laden{display:grid;place-items:center;min-height:100dvh;color:var(--grau);font-weight:600}
 </style>
 </head>
@@ -257,6 +265,7 @@ const store = {
 };
 
 const SPOON = '<svg viewBox="0 0 18 24" aria-hidden="true"><rect x="7.6" y="10" width="2.8" height="13.5" rx="1.4" fill="#b9824a"/><ellipse cx="9" cy="6.6" rx="4.9" ry="6.2" fill="#b9824a"/><ellipse cx="9" cy="6.9" rx="3" ry="4.2" fill="#9a6835"/></svg>';
+const GOLD_SPOON = '<svg viewBox="0 0 18 24" aria-hidden="true"><rect x="7.6" y="10" width="2.8" height="13.5" rx="1.4" fill="#d4a017"/><ellipse cx="9" cy="6.6" rx="4.9" ry="6.2" fill="#e8b93a"/><ellipse cx="9" cy="6.9" rx="3" ry="4.2" fill="#b8860b"/></svg>';
 const spoons = n => `<span class="loeffel" role="img" aria-label="${n} von 5 Kochlöffeln">${[1, 2, 3, 4, 5].map(i => `<span class="${i <= Math.round(n) ? "" : "aus"}">${SPOON}</span>`).join("")}</span>`;
 const num = (x, d = 1) => x.toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
 
@@ -285,6 +294,12 @@ const rsvpsOf = day => S.rsvps.filter(r => r.day === day);
 const myRsvp = day => S.rsvps.find(r => r.day === day && r.user_id === S.me.id);
 const ratingsOf = day => S.ratings.filter(r => r.day === day);
 const avg = list => list.length ? list.reduce((s, r) => s + r.spoons, 0) / list.length : 0;
+const wavg = list => list.length ? list.reduce((s, r) => s + (r.gold ? 10 : r.spoons), 0) / list.length : 0;   // Ranking: Gold zählt wie 10
+const golds = list => list.filter(r => r.gold);
+const goldStart = () => (B.demo ? "2026-01-01" : "2027-01-01");
+const goldOpen = day => day >= goldStart() && rateOpen(day) && new Date() < parse(addDays(day, 7));
+const myGold = year => S.ratings.find(r => r.user_id === S.me.id && r.gold && r.day.slice(0, 4) === year);
+const goldMark = n => n ? `<span class="goldmark">${GOLD_SPOON}${n > 1 ? n + "× " : ""}Gold</span>` : "";
 const photosOf = day => S.photos.filter(p => p.day === day);
 const mayRate = m => m && rateOpen(m.day) && !isCook(m) && myRsvp(m.day)?.coming;
 const activeMembers = () => S.members.filter(m => m.active);
@@ -294,22 +309,27 @@ const euro = c => (c / 100).toLocaleString("de-DE", { style: "currency", currenc
 const euroPlus = c => (c > 0 ? "+" : "") + euro(c);
 const cents = x => Math.round(Number(x) * 100);
 
+// Einkauf: "cost" hat Koch 1 ausgelegt, "cost2" Koch 2
+const totalCost = m => m.cost == null && m.cost2 == null ? null : Number(m.cost || 0) + Number(m.cost2 || 0);
 // Clubkasse: Anteil je Portion, Köche bekommen die Kosten gutgeschrieben (Cent-genau, Summe immer 0)
 function shares(m) {
-  if (m.cost == null || rsvpOpen(m.day)) return null;
+  if (totalCost(m) == null || rsvpOpen(m.day)) return null;
   const rs = rsvpsOf(m.day).filter(r => r.coming), total = rs.reduce((n, r) => n + portionsOf(r), 0);
   if (!total) return null;
   const map = new Map(); let sum = 0;
-  rs.forEach(r => { const c = Math.round(cents(m.cost) * portionsOf(r) / total); sum += c; map.set(r.user_id, c); });
-  return { map, sum, total, per: cents(m.cost) / total };
+  const all = cents(totalCost(m));
+  rs.forEach(r => { const c = Math.round(all * portionsOf(r) / total); sum += c; map.set(r.user_id, c); });
+  return { map, sum, total, per: all / total };
 }
 function balances() {
   const bal = new Map(S.members.map(m => [m.id, 0])), add = (id, c) => bal.set(id, (bal.get(id) || 0) + c);
   for (const m of S.meals) {
     const sh = shares(m); if (!sh) continue;
     sh.map.forEach((c, id) => add(id, -c));
-    const cs = cooks(m), part = Math.floor(sh.sum / cs.length);
-    cs.forEach((id, i) => add(id, i ? part : sh.sum - part * (cs.length - 1)));
+    // Jeder Koch bekommt gutgeschrieben, was er ausgelegt hat (Rundungscent geht an Koch 1)
+    const c2 = m.cook2 ? cents(m.cost2 || 0) : 0;
+    add(m.cook1, sh.sum - c2);
+    if (m.cook2) add(m.cook2, c2);
   }
   for (const p of S.payments) { add(p.from_user, cents(p.amount)); add(p.to_user, -cents(p.amount)); }
   return bal;
@@ -350,7 +370,7 @@ function demoBackend() {
   dishes.forEach((d, i) => {
     const day = addDays(nf, -7 * (dishes.length - i));
     const c1 = members[(i * 3 + 1) % 15].id, c2 = i === 5 ? members[9].id : null;
-    db.meals.push({ day, cook1: c1, cook2: c2, title: d[0], description: d[1], cost: 58 + Math.round(rnd() * 500) / 10, recipe: i % 2 ? "" : "Zutaten für 12 Personen\n– 2 kg Hauptzutat\n– 1 kg Beilage\n– Gewürze nach Gefühl\n\nZubereitung\nAlles vorbereiten, in Ruhe schmoren lassen und rechtzeitig abschmecken." });
+    db.meals.push({ day, cook1: c1, cook2: c2, title: d[0], description: d[1], cost: c2 ? 60 : 58 + Math.round(rnd() * 500) / 10, cost2: c2 ? 20 : null, recipe: i % 2 ? "" : "Zutaten für 12 Personen\n– 2 kg Hauptzutat\n– 1 kg Beilage\n– Gewürze nach Gefühl\n\nZubereitung\nAlles vorbereiten, in Ruhe schmoren lassen und rechtzeitig abschmecken." });
     const base = 3 + rnd() * 1.8;
     members.forEach(m => {
       const cook = m.id === c1 || m.id === c2, coming = cook || rnd() < 0.8;
@@ -364,6 +384,8 @@ function demoBackend() {
   db.meals.push({ day: addDays(nf, 14), cook1: "m7", cook2: null, title: "", description: "", recipe: "" });
   db.meals.push({ day: addDays(nf, 21), cook1: "m2", cook2: "m11", title: "Grünkohl mit Pinkel", description: "", recipe: "" });
   members.forEach((m, i) => { if (m.id === "m4") db.rsvps.push({ day: nf, user_id: m.id, coming: true, guests: 0 }); else if (i && i < 11) db.rsvps.push({ day: nf, user_id: m.id, coming: i % 5 !== 0, guests: i === 3 ? 2 : 0, late: i === 8 && !softOpen(nf) }); });
+  { const r = db.ratings.find(x => x.day === db.meals[0].day && x.user_id !== "me");   // ein goldener Löffel als Beispiel
+    if (r) Object.assign(r, { spoons: 5, gold: true, gold_reason: "Die besten Rouladen, die ich je gegessen habe. Die Soße allein war schon Gold wert." }); }
   db.payments.push({ id: 1, from_user: "me", to_user: "m1", amount: 20, created_by: "me", created_at: addDays(nf, -20) + "T12:00:00" },
                    { id: 2, from_user: "m5", to_user: "m4", amount: 12.5, created_by: "m4", created_at: addDays(nf, -9) + "T12:00:00" });
   const t = (d, h) => { const x = new Date(); x.setDate(x.getDate() - d); x.setHours(h, 12, 0, 0); return x.toISOString(); };
@@ -392,8 +414,8 @@ function demoBackend() {
     },
     async release(day, who = "me") {
       const m = db.meals.find(x => x.day === day); if (!m) return;
-      if (m.cook1 === who) { if (m.cook2) { m.cook1 = m.cook2; m.cook2 = null; } else db.meals = db.meals.filter(x => x !== m); }
-      else if (m.cook2 === who) m.cook2 = null;
+      if (m.cook1 === who) { if (m.cook2) Object.assign(m, { cook1: m.cook2, cook2: null, cost: m.cost2 ?? null, cost2: null }); else db.meals = db.meals.filter(x => x !== m); }
+      else if (m.cook2 === who) Object.assign(m, { cook2: null, cost2: null });
     },
     async saveMeal(day, f) { Object.assign(db.meals.find(x => x.day === day), f); },
     async setRsvp(day, coming, guests = 0, force) {
@@ -408,9 +430,15 @@ function demoBackend() {
     },
     async addPayment(from_user, to_user, amount) { db.payments.push({ id: ++pid, from_user, to_user, amount, created_by: "me", created_at: new Date().toISOString() }); },
     async deletePayment(id) { db.payments = db.payments.filter(p => p.id !== id); },
-    async rate(day, spoons, comment) {
-      db.ratings = db.ratings.filter(r => !(r.day === day && r.user_id === "me"));
-      db.ratings.push({ day, user_id: "me", spoons, comment, created_at: new Date().toISOString() });
+    async rate(day, spoons, comment, gold = false, gold_reason = "") {
+      const alt = db.ratings.find(r => r.day === day && r.user_id === "me");
+      if (alt?.gold && (!gold || gold_reason !== alt.gold_reason)) throw new Error("Ein goldener Löffel ist endgültig und lässt sich nicht mehr ändern.");
+      if (gold && !alt?.gold) {
+        if (!goldOpen(day)) throw new Error("Für dieses Essen lässt sich kein goldener Löffel mehr vergeben.");
+        if (db.ratings.some(r => r.user_id === "me" && r.gold && r.day.slice(0, 4) === day.slice(0, 4))) throw new Error("Du hast deinen goldenen Löffel für dieses Jahr schon vergeben.");
+      }
+      db.ratings = db.ratings.filter(r => r !== alt);
+      db.ratings.push({ day, user_id: "me", spoons, comment, gold, gold_reason, created_at: new Date().toISOString() });
     },
     async addPhoto(day, blob) { db.photos.push({ id: "p" + Date.now(), day, user_id: "me", url: URL.createObjectURL(blob), created_at: new Date().toISOString() }); },
     async deletePhoto(p) { db.photos = db.photos.filter(x => x.id !== p.id); },
@@ -444,7 +472,9 @@ function liveBackend() {
     [/Password should be/i, "Das Passwort braucht mindestens 8 Zeichen."],
     [/valid email|invalid format/i, "Bitte eine gültige E-Mail-Adresse eingeben."],
     [/Failed to fetch|NetworkError|Load failed/i, "Keine Verbindung. Bitte Internet prüfen und noch einmal versuchen."],
-    [/rate limit/i, "Zu viele Versuche. Bitte kurz warten."]
+    [/rate limit/i, "Zu viele Versuche. Bitte kurz warten."],
+    [/ratings_gold_per_year/i, "Du hast deinen goldenen Löffel für dieses Jahr schon vergeben."],
+    [/ratings_gold_check/i, "Für den goldenen Löffel braucht es eine Begründung mit mindestens 20 Zeichen."]
   ];
   const ok = (res, rls) => {
     if (res.error) {
@@ -511,7 +541,7 @@ function liveBackend() {
     async deletePayment(id) { ok(await sb.from("payments").delete().eq("id", id)); },
     async savePush(endpoint, p256dh, auth) { ok(await sb.rpc("save_push", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth })); },
     async dropPush(endpoint) { ok(await sb.rpc("drop_push", { p_endpoint: endpoint })); },
-    async rate(day, spoons, comment) { ok(await sb.from("ratings").upsert({ day, user_id: uid, spoons, comment }), "Bewerten kann nur, wer angemeldet war und nicht selbst gekocht hat."); },
+    async rate(day, spoons, comment, gold = false, gold_reason = "") { ok(await sb.from("ratings").upsert({ day, user_id: uid, spoons, comment, gold, gold_reason }), "Bewerten kann nur, wer angemeldet war und nicht selbst gekocht hat."); },
     async addPhoto(day, blob) {
       const path = `${uid}/${day}-${Date.now()}.jpg`;
       ok(await sb.storage.from("fotos").upload(path, blob, { contentType: "image/jpeg" }));
@@ -651,7 +681,7 @@ function viewEssen() {
     return `<button class="essen" data-act="open" data-day="${m.day}">
       <span class="bild" ${p ? `style="background-image:url('${esc(p.url)}')"` : ""}>${p ? "" : `<span class="loeffel gross">${SPOON}</span>`}</span>
       <span><h3>${esc(m.title || "Essen ohne Namen")}</h3><small>${fmt(m.day, { day: "numeric", month: "long", year: "numeric" })}, von ${esc(cookNames(m))}</small>
-      <span style="display:block;margin-top:6px">${r.length ? `${spoons(avg(r))}<span class="schnitt">${num(avg(r))}</span>` : `<small>Noch keine Bewertung</small>`}</span>
+      <span style="display:block;margin-top:6px">${r.length ? `${spoons(avg(r))}<span class="schnitt">${num(avg(r))}</span> ${goldMark(golds(r).length)}` : `<small>Noch keine Bewertung</small>`}</span>
       <small>${[m.recipe ? "Rezept" : "", photosOf(m.day).length ? `${photosOf(m.day).length} Foto${photosOf(m.day).length > 1 ? "s" : ""}` : ""].filter(Boolean).join(", ")}</small></span></button>`;
   }).join("")}</div>` + nach;
 }
@@ -676,18 +706,19 @@ function boards() {
   const per = S.members.map(m => {
     const mine = past.filter(x => cooks(x).includes(m.id));
     const rs = mine.flatMap(x => ratingsOf(x.day));
-    return { m, gekocht: mine.length, n: rs.length, avg: avg(rs),
+    return { m, gekocht: mine.length, n: rs.length, avg: wavg(rs), gold: golds(rs).length,
       gegessen: S.rsvps.filter(r => r.user_id === m.id && r.coming && r.day <= today() && meal(r.day)).length,
       bewertet: S.ratings.filter(r => r.user_id === m.id).length };
   });
   return {
     beste: { label: "Beste Köche", titel: "Löffelkrone", leer: "Sobald die ersten Bewertungen da sind, steht hier der bestbewertete Koch.",
-      rows: per.filter(p => p.n).sort((a, b) => b.avg - a.avg || b.n - a.n).map(p => ({ m: p.m, big: num(p.avg, 2), small: `${p.n} Bewertung${p.n > 1 ? "en" : ""}`, sp: p.avg })) },
+      rows: per.filter(p => p.n).sort((a, b) => b.avg - a.avg || b.gold - a.gold || b.n - a.n).map(p => ({ m: p.m, big: num(p.avg, 2), small: `${p.n} Bewertung${p.n > 1 ? "en" : ""}${p.gold ? `, ${p.gold}× Gold` : ""}`, sp: Math.min(5, p.avg) })) },
     fleiss: { label: "Am häufigsten gekocht", titel: "Dauerbrenner am Herd", leer: "Noch hat niemand gekocht.",
       rows: per.filter(p => p.gekocht).sort((a, b) => b.gekocht - a.gekocht || b.avg - a.avg).map(p => ({ m: p.m, big: p.gekocht + "×", small: "gekocht" })) },
     gerichte: { label: "Beste Gerichte", titel: "Gericht des Jahres", leer: "Noch wurde kein Essen bewertet.",
-      rows: past.filter(x => ratingsOf(x.day).length).map(x => ({ x, a: avg(ratingsOf(x.day)), n: ratingsOf(x.day).length })).sort((a, b) => b.a - a.a || b.n - a.n).slice(0, 10)
-        .map(r => ({ m: member(r.x.cook1), name: r.x.title || "Essen ohne Namen", sub: `${esc(cookNames(r.x))}, ${fmt(r.x.day, { day: "numeric", month: "numeric", year: "2-digit" })}`, big: num(r.a, 2), small: `${r.n} Bewertung${r.n > 1 ? "en" : ""}`, sp: r.a, day: r.x.day })) },
+      rows: past.filter(x => ratingsOf(x.day).length).map(x => ({ x, a: wavg(ratingsOf(x.day)), g: golds(ratingsOf(x.day)).length, n: ratingsOf(x.day).length })).sort((a, b) => b.a - a.a || b.g - a.g || b.n - a.n).slice(0, 10)
+        .map(r => ({ m: member(r.x.cook1), name: r.x.title || "Essen ohne Namen", sub: `${esc(cookNames(r.x))}, ${fmt(r.x.day, { day: "numeric", month: "numeric", year: "2-digit" })}`, big: num(r.a, 2), small: `${r.n} Bewertung${r.n > 1 ? "en" : ""}${r.g ? `, ${r.g}× Gold` : ""}`, sp: Math.min(5, r.a), day: r.x.day })) },
+    gold: { label: "Goldene Löffel", titel: "Ehrentafel", leer: "", rows: [] },
     esser: { label: "Treueste Esser", titel: "Stammgast", leer: "Noch keine Anmeldungen.",
       rows: per.filter(p => p.gegessen).sort((a, b) => b.gegessen - a.gegessen).map(p => ({ m: p.m, big: p.gegessen + "×", small: "mitgegessen" })) },
     kritiker: { label: "Fleißigste Bewerter", titel: "Chefkritiker", leer: "Noch keine Bewertungen.",
@@ -697,6 +728,14 @@ function boards() {
 function viewRanking() {
   const all = boards(), b = all[S.board], [first, ...rest] = b.rows;
   const chips = `<div class="chips">${Object.entries(all).map(([k, v]) => `<button data-act="board" data-b="${k}" aria-pressed="${S.board === k}">${v.label}</button>`).join("")}</div>`;
+  if (S.board === "gold") {
+    const list = golds(S.ratings).filter(r => meal(r.day)).sort((a, b) => b.day.localeCompare(a.day));
+    if (!list.length) return chips + `<div class="karte leer">${today() < goldStart() ? "Ab den Essen im Januar 2027 hat jedes Mitglied einen goldenen Löffel pro Jahr. Hier stehen dann alle, die einen bekommen haben, mit Begründung." : "Dieses Jahr wurde noch kein goldener Löffel vergeben."}</div>`;
+    return chips + list.map(r => { const m = meal(r.day); return `<button class="gold" style="display:block;width:100%;text-align:left" data-act="open" data-day="${r.day}">
+      <span class="goldmark">${GOLD_SPOON}Gold</span> <b>${esc(cookNames(m))}</b> für ${esc(m.title || "Essen ohne Namen")}
+      <small style="display:block;color:#7a5a00;margin-top:4px">${fmt(r.day, { day: "numeric", month: "long", year: "numeric" })}, von ${esc(member(r.user_id).name)}</small>
+      <p>„${esc(r.gold_reason)}“</p></button>`; }).join("") + `<p class="hinweis">Jedes Mitglied vergibt einen goldenen Löffel pro Kalenderjahr. Im Ranking zählt er wie 10 Kochlöffel.</p>`;
+  }
   if (!first) return chips + `<div class="karte leer">${b.leer}</div>`;
   const tie = rest.length && rest[0].big === first.big && rest[0].small === first.small;
   return chips + `<div class="sieger" ${first.day ? `data-act="open" data-day="${first.day}" role="button" tabindex="0"` : ""}>${avatar(first.m, "l")}<div><small>${b.titel}${tie ? " (geteilt)" : ""}</small><h3>${esc(first.name || first.m.name)}</h3>
@@ -704,7 +743,7 @@ function viewRanking() {
     ${rest.length ? `<div class="karte">${rest.map((r, i) => `<${r.day ? `button data-act="open" data-day="${r.day}"` : "div"} class="zeile"><span class="platz">${i + 2}</span>${avatar(r.m)}
       <span class="mitte"><b>${esc(r.name || r.m.name)}</b>${r.sub ? `<small>${r.sub}</small>` : r.sp ? `<small>${spoons(r.sp)}</small>` : ""}</span>
       <span class="wert-r"><b>${r.big}</b>${r.small}</span></${r.day ? "button" : "div"}>`).join("")}</div>` : ""}
-    <p class="hinweis">Gezählt werden alle Freitage bis heute. Bei zwei Köchen zählt das Essen für beide.</p>`;
+    <p class="hinweis">Gezählt werden alle Freitage bis heute. Bei zwei Köchen zählt das Essen für beide. Ein goldener Löffel zählt wie 10 Kochlöffel.</p>`;
 }
 
 // ---------- Blätter: Essen-Detail und Profil ----------
@@ -720,11 +759,13 @@ function sheetMeal(day) {
       <label class="feld">Was gibt es?<input class="ein" name="title" maxlength="120" value="${esc(m.title)}" placeholder="z. B. Rinderrouladen mit Rotkohl"></label>
       <label class="feld">Kurze Beschreibung<textarea class="ein" name="description" maxlength="2000" placeholder="Beilagen, vegetarische Variante, Hinweise …">${esc(m.description)}</textarea></label>
       <label class="feld">Rezept (kannst du auch später nachtragen)<textarea class="ein" name="recipe" maxlength="20000" style="min-height:200px" placeholder="Zutaten und Zubereitung">${esc(m.recipe)}</textarea></label>
-      <label class="feld">Einkaufskosten gesamt in Euro (für die Clubkasse)<input class="ein" name="cost" inputmode="decimal" value="${m.cost == null ? "" : num(Number(m.cost), 2)}" placeholder="z. B. 86,40"></label>
+      ${m.cook2 ? `<p style="font-weight:700;margin:16px 0 0">Einkaufskosten in Euro (für die Clubkasse)</p><p style="color:var(--grau);font-size:14.5px;margin:2px 0 0">Jeder trägt ein, was er selbst ausgelegt hat.</p>` : ""}
+      ${cooks(m).map((id, i) => { const k = i ? "cost2" : "cost"; return `<label class="feld">${m.cook2 ? `Ausgelegt von ${esc(member(id).name)}` : "Einkaufskosten in Euro (für die Clubkasse)"}<input class="ein" name="${k}" inputmode="decimal" value="${m[k] == null ? "" : num(Number(m[k]), 2)}" placeholder="z. B. 86,40"></label>`; }).join("")}
       <div class="reihe"><button class="btn senf">Speichern</button><button type="button" class="btn hell" data-act="edit" data-v="0">Abbrechen</button></div></form>`;
   let h = leiste + `<h2 class="titel">${esc(m.title || "Gericht noch geheim")}</h2>
     <div class="koch" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:600">${cooks(m).map(id => avatar(member(id), "s")).join("")}<span>${esc(cookNames(m))} ${future ? (cooks(m).length > 1 ? "kochen" : "kocht") : (cooks(m).length > 1 ? "haben gekocht" : "hat gekocht")}</span>
       ${rs.length ? `<span style="margin-left:auto">${spoons(avg(rs))}<span class="schnitt">${num(avg(rs))}</span></span>` : ""}</div>
+    ${golds(rs).map(r => `<div class="gold"><span class="goldmark">${GOLD_SPOON}Goldener Löffel</span> von <b>${esc(member(r.user_id).name)}</b><p>„${esc(r.gold_reason)}“</p></div>`).join("")}
     ${m.description ? `<p style="margin:10px 0 0">${esc(m.description)}</p>` : ""}`;
   if (cook || admin || (future && !m.cook2)) h += `<div class="reihe">
       ${cook || admin ? `<button class="btn klein" data-act="edit" data-v="1">Gericht und Rezept bearbeiten</button>` : ""}
@@ -746,20 +787,29 @@ function sheetMeal(day) {
     : `<p style="color:var(--grau);font-size:14.5px;margin-bottom:10px">Für Mitglieder, die sich nicht selbst angemeldet haben oder nach Anmeldeschluss dazukommen.</p><button class="btn klein hell" data-act="attauf">Teilnehmer ändern</button>`}</div>`;
   // Kosten
   const sh = shares(m), my = sh?.map.get(S.me.id);
-  if (m.cost != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0"><b>${euro(cents(m.cost))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss am Donnerstagabend.`}</p></div>`;
+  const tc = totalCost(m), aufteilung = m.cook2 && tc != null ? `${esc(member(m.cook1).name)} ${euro(cents(m.cost || 0))} + ${esc(member(m.cook2).name)} ${euro(cents(m.cost2 || 0))} = ` : "";
+  if (tc != null) h += `<div class="block"><h3>Einkauf</h3><p style="margin:0">${aufteilung}<b>${euro(cents(tc))}</b>${sh ? ` für ${sh.total} Portionen, also <b>${euro(Math.round(sh.per))}</b> pro Portion.${my ? ` Dein Anteil: <b>${euro(my)}</b>.` : ""}` : `. Abgerechnet wird nach Anmeldeschluss am Donnerstagabend.`}</p></div>`;
   else if (cook && !softOpen(day)) h += `<div class="block"><h3>Einkauf</h3><p>Trag ein, was du ausgegeben hast. Die App verteilt den Betrag auf alle Portionen.</p><button class="btn klein senf" data-act="edit" data-v="1">Einkaufskosten eintragen</button></div>`;
   // Bewertung
   if (!rateOpen(day) && day <= today()) h += `<div class="block"><h3>Bewertungen</h3><p style="color:var(--grau);margin:0">Bewerten geht heute ab 12:30 Uhr.</p></div>`;
   if (rateOpen(day)) {
     h += `<div class="block"><h3>Bewertungen${rs.length ? ` (${rs.length})` : ""}</h3>`;
     if (mayRate(m)) {
+      const year = day.slice(0, 4), vergeben = myGold(year), goldFest = !!mine?.gold, goldAn = goldFest || S.goldDraft;
+      if (goldAn) S.draft = 5;
       S.draft = S.draft || mine?.spoons || 0;
+      let goldTeil = "";
+      if (goldFest) goldTeil = `<p class="gold" style="margin-top:14px"><span class="goldmark">${GOLD_SPOON}Gold</span> Du hast diesem Essen deinen goldenen Löffel ${year} gegeben.</p>`;
+      else if (goldOpen(day) && !vergeben) goldTeil = `<button type="button" class="goldwahl" data-act="goldwahl" aria-pressed="${!!S.goldDraft}">${GOLD_SPOON}<span><b>Goldenen Löffel vergeben</b><br><small style="color:var(--grau)">Dein einziger für ${year}. Zählt im Ranking wie 10 Kochlöffel.</small></span></button>
+          ${S.goldDraft ? `<label class="feld">Begründung (Pflicht, mindestens 20 Zeichen, für alle sichtbar)<textarea class="ein" name="reason" maxlength="1000" placeholder="Was war so herausragend?">${esc(S.rdraft || "")}</textarea></label>` : ""}`;
+      else if (goldOpen(day) && vergeben) goldTeil = `<p style="color:var(--grau);font-size:14.5px;margin-top:12px">Deinen goldenen Löffel ${year} hast du an ${esc(cookNames(meal(vergeben.day)))} vergeben.</p>`;
       h += `<form data-form="rate" data-day="${day}"><p style="font-weight:600">${mine ? "Deine Bewertung ändern" : "Wie hat es dir geschmeckt?"}</p>
-        <div class="loeffel gross" id="wahl">${[1, 2, 3, 4, 5].map(i => `<button type="button" data-act="spoon" data-n="${i}" class="${i <= S.draft ? "" : "aus"}" aria-label="${i} Kochlöffel">${SPOON}</button>`).join("")}</div>
-        <label class="feld">Kommentar (freiwillig)<input class="ein" name="comment" maxlength="500" value="${esc(mine?.comment || "")}" placeholder="Was war besonders gut?"></label>
-        <div class="reihe"><button class="btn senf">${mine ? "Bewertung ändern" : "Bewertung abgeben"}</button></div></form>${rs.length ? '<hr style="border:0;border-top:1px solid var(--linie);margin:14px 0 4px">' : ""}`;
+        <div class="loeffel gross" id="wahl">${[1, 2, 3, 4, 5].map(i => `<button type="button" data-act="spoon" data-n="${i}" class="${i <= S.draft ? "" : "aus"}" aria-label="${i} Kochlöffel" ${goldAn ? "disabled" : ""}>${SPOON}</button>`).join("")}</div>
+        ${goldTeil}
+        <label class="feld">Kommentar (freiwillig)<input class="ein" name="comment" maxlength="500" value="${esc(S.cdraft ?? mine?.comment ?? "")}" placeholder="Was war besonders gut?"></label>
+        <div class="reihe"><button class="btn senf">${S.goldDraft ? "Goldenen Löffel vergeben" : mine ? "Bewertung ändern" : "Bewertung abgeben"}</button></div></form>${rs.length ? '<hr style="border:0;border-top:1px solid var(--linie);margin:14px 0 4px">' : ""}`;
     } else if (!cook) h += `<p style="color:var(--grau)">Bewerten kann, wer für diesen Freitag angemeldet war.</p>`;
-    h += rs.length ? rs.map(r => `<div class="stimme">${avatar(member(r.user_id), "s")}<div><b>${esc(member(r.user_id).name)}</b> ${spoons(r.spoons)}${r.comment ? `<p>${esc(r.comment)}</p>` : ""}</div></div>`).join("") : (mayRate(m) ? "" : `<p style="color:var(--grau);margin:0">Noch keine Bewertung.</p>`);
+    h += rs.length ? rs.map(r => `<div class="stimme">${avatar(member(r.user_id), "s")}<div><b>${esc(member(r.user_id).name)}</b> ${spoons(r.spoons)} ${r.gold ? goldMark(1) : ""}${r.comment ? `<p>${esc(r.comment)}</p>` : ""}</div></div>`).join("") : (mayRate(m) ? "" : `<p style="color:var(--grau);margin:0">Noch keine Bewertung.</p>`);
     h += `</div>`;
   }
   // Rezept
@@ -790,7 +840,7 @@ function sheetKasse() {
   const meins = plan.filter(p => p.from === me || p.to === me), rest = plan.filter(p => p.from !== me && p.to !== me);
   const zeile = p => `<div class="stimme" style="align-items:center">${avatar(member(p.from === me ? p.to : p.from), "s")}<div style="flex:1">${p.from === me ? `Du gibst <b>${esc(member(p.to).name)}</b>` : p.to === me ? `<b>${esc(member(p.from).name)}</b> gibt dir` : `<b>${esc(member(p.from).name)}</b> gibt <b>${esc(member(p.to).name)}</b>`} <span class="betrag">${euro(p.c)}</span>
     ${p.from === me || p.to === me ? `<div class="reihe" style="margin-top:6px"><button class="btn klein ${p.from === me ? "senf" : "hell"}" data-act="zahl" data-from="${p.from}" data-to="${p.to}" data-c="${p.c}">${p.from === me ? "Als bezahlt eintragen" : "Als erhalten eintragen"}</button></div>` : ""}</div></div>`;
-  const offen = S.meals.filter(m => m.day <= today() && m.cost == null).length;
+  const offen = S.meals.filter(m => m.day <= today() && totalCost(m) == null).length;
   const zahlungen = [...S.payments].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 15);
   return `<div class="leiste"><span>Clubkasse</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>
     <div class="stand"><small>Dein Stand</small><b>${euroPlus(mine)}</b><small>${mine < 0 ? "Diesen Betrag schuldest du der Runde." : mine > 0 ? "Diesen Betrag bekommst du noch." : "Du bist ausgeglichen."}</small></div>
@@ -798,7 +848,7 @@ function sheetKasse() {
     <div class="block"><h3>Alle Kontostände</h3>${[...bal].filter(([id, c]) => c || member(id).active).sort((a, b) => b[1] - a[1]).map(([id, c]) => `<div class="stimme" style="align-items:center">${avatar(member(id), "s")}<div style="flex:1"><b>${esc(member(id).name)}</b></div><span class="betrag ${c < 0 ? "minus" : c > 0 ? "plus" : ""}">${euroPlus(c)}</span></div>`).join("")}</div>
     <div class="block"><h3>Letzte Zahlungen</h3>${zahlungen.length ? zahlungen.map(p => `<div class="stimme" style="align-items:center"><div style="flex:1"><b>${esc(member(p.from_user).name)}</b> an <b>${esc(member(p.to_user).name)}</b><br><small style="color:var(--grau)">${new Date(p.created_at).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })}</small></div><span class="betrag">${euro(cents(p.amount))}</span>
       ${p.created_by === me || S.me.is_admin ? `<button class="btn klein rot" data-act="zahlweg" data-id="${p.id}" aria-label="Zahlung löschen">Löschen</button>` : ""}</div>`).join("") : `<p style="margin:0;color:var(--grau)">Noch keine Zahlungen eingetragen.</p>`}</div>
-    <p class="hinweis">Die Einkaufskosten eines Freitags werden nach Anmeldeschluss am Donnerstagabend auf alle Portionen verteilt. Gäste zählen bei dem Mitglied, das sie mitbringt. Wer kocht, bekommt die Kosten gutgeschrieben, bei zwei Köchen je zur Hälfte.${offen ? ` Für ${offen} Essen fehlen noch die Einkaufskosten.` : ""}</p>`;
+    <p class="hinweis">Die Einkaufskosten eines Freitags werden nach Anmeldeschluss am Donnerstagabend auf alle Portionen verteilt. Gäste zählen bei dem Mitglied, das sie mitbringt. Wer kocht, bekommt gutgeschrieben, was er ausgelegt hat; bei zwei Köchen trägt jeder seinen eigenen Betrag ein.${offen ? ` Für ${offen} Essen fehlen noch die Einkaufskosten.` : ""}</p>`;
 }
 function sheetProfil() {
   const admin = S.me.is_admin;
@@ -806,6 +856,10 @@ function sheetProfil() {
     <div class="block"><form data-form="name" style="display:flex;gap:12px;align-items:flex-end">${avatar(S.me, "l")}
       <label class="feld" style="flex:1;margin:0">Dein Name<input class="ein" name="name" required minlength="2" maxlength="40" value="${esc(S.me.name)}"></label>
       <button class="btn klein" style="min-height:48px">Speichern</button></form></div>
+    <div class="block"><h3>Goldener Löffel</h3>${(() => { const y = today().slice(0, 4), g = today() >= goldStart() ? myGold(y) : null;
+      if (today() < goldStart()) return `<p style="margin:0;color:var(--grau)">Ab den Essen im Januar 2027 hat jedes Mitglied einen goldenen Löffel pro Kalenderjahr. Er zählt im Ranking wie 10 Kochlöffel und braucht eine Begründung.</p>`;
+      return g ? `<p style="margin:0">${GOLD_SPOON.replace("<svg", '<svg style="width:16px;height:22px;vertical-align:middle"')} Für ${y} vergeben an <b>${esc(cookNames(meal(g.day)) || "")}</b> für ${esc(meal(g.day)?.title || "das Essen")} am ${fmt(g.day, { day: "numeric", month: "long" })}.</p>`
+        : `<p style="margin:0">${GOLD_SPOON.replace("<svg", '<svg style="width:16px;height:22px;vertical-align:middle"')} Dein goldener Löffel für ${y} ist <b>noch frei</b>. Du kannst ihn bis zum Donnerstag nach einem Essen vergeben.</p>`; })()}</div>
     ${B.demo ? "" : `<div class="block"><h3>Erinnerungen</h3>${S.push === null
       ? `<p style="margin:0;color:var(--grau)">Auf diesem Gerät sind Mitteilungen hier nicht möglich. Auf dem iPhone: die App zuerst über „Teilen“ zum Home-Bildschirm hinzufügen und von dort öffnen.</p>`
       : `<p style="color:var(--grau);font-size:14.5px">Mittwochnachmittag, falls du dich noch nicht an- oder abgemeldet hast. Wenn du kochst, bekommst du Donnerstag früh die Zahl der Portionen und Donnerstagabend den Endstand mit allen Nachmeldungen.</p>
@@ -836,12 +890,12 @@ async function run(key, fn, okMsg) {
   catch (e) { toast(e.message || "Das hat nicht geklappt.", true); try { await reload(); } catch { /* offline */ } }
   finally { busy.delete(key); }
 }
-function closeSheet() { S.sheet = null; S.draft = 0; render(); }
+function closeSheet() { S.sheet = null; S.draft = 0; S.goldDraft = false; S.cdraft = S.rdraft = undefined; render(); }
 
 const ACT = {
   tab(el) { S.tab = el.dataset.tab; render(); if (S.tab !== "chat") window.scrollTo(0, 0); },
   profil() { S.sheet = { type: "profil" }; render(); if (S.me.is_admin && S.invite === null) B.getInvite().then(c => { S.invite = c; if (S.sheet?.type === "profil") render(); }).catch(() => {}); },
-  open(el) { S.sheet = { type: "meal", day: el.dataset.day }; S.draft = 0; render(); },
+  open(el) { S.sheet = { type: "meal", day: el.dataset.day }; S.draft = 0; S.goldDraft = false; S.cdraft = S.rdraft = undefined; render(); },
   zu: closeSheet,
   "zu-aussen"(el, ev) { if (ev.target === el) closeSheet(); },
   mehr() { S.weeks += 12; render(); },
@@ -884,7 +938,8 @@ const ACT = {
     run("release", () => B.release(el.dataset.day, el.dataset.who), "Ausgetragen.");
   },
   edit(el) { S.sheet.edit = el.dataset.v === "1"; render(); },
-  spoon(el) { S.draft = +el.dataset.n; document.querySelectorAll("#wahl button").forEach(b => b.classList.toggle("aus", +b.dataset.n > S.draft)); },
+  goldwahl() { const f = document.querySelector('form[data-form="rate"]'); S.cdraft = f?.comment.value; S.rdraft = f?.reason?.value; S.goldDraft = !S.goldDraft; if (!S.goldDraft) S.draft = 0; render(); },
+  spoon(el) { if (S.goldDraft) return; S.draft = +el.dataset.n; document.querySelectorAll("#wahl button").forEach(b => b.classList.toggle("aus", +b.dataset.n > S.draft)); },
   bild(el) { const d = document.createElement("div"); d.className = "gross-bild"; d.innerHTML = `<img src="${esc(el.dataset.url)}" alt="">`; d.onclick = () => d.remove(); document.body.append(d); },
   fotoweg(el) {
     if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = "?"; el.style.background = "var(--tomate)"; return; }
@@ -922,14 +977,26 @@ const FORM = {
     f.body.value = ""; await B.sendMessage(body);
   },
   async meal(f) {
-    const raw = f.cost.value.trim().replace(/\s|€/g, "").replace(",", "."), cost = raw === "" ? null : Number(raw);
-    if (cost !== null && !(cost >= 0 && cost <= 5000)) throw new Error("Bitte die Einkaufskosten als Betrag eingeben, z. B. 86,40.");
-    await B.saveMeal(f.dataset.day, { title: f.title.value.trim(), description: f.description.value.trim(), recipe: f.recipe.value.trim(), cost: cost === null ? null : Math.round(cost * 100) / 100 });
+    const betrag = el => { if (!el) return undefined; const raw = el.value.trim().replace(/\s|€/g, "").replace(",", "."); if (raw === "") return null;
+      const x = Number(raw); if (!(x >= 0 && x <= 5000)) throw new Error("Bitte die Einkaufskosten als Betrag eingeben, z. B. 86,40."); return Math.round(x * 100) / 100; };
+    const felder = { title: f.title.value.trim(), description: f.description.value.trim(), recipe: f.recipe.value.trim(), cost: betrag(f.cost) };
+    if (f.cost2) felder.cost2 = betrag(f.cost2);
+    await B.saveMeal(f.dataset.day, felder);
     S.sheet.edit = false; await reload(); toast("Gespeichert.");
   },
   async rate(f) {
     if (!S.draft) throw new Error("Bitte erst die Kochlöffel antippen.");
-    await B.rate(f.dataset.day, S.draft, f.comment.value.trim()); S.draft = 0; await reload(); toast("Danke für deine Bewertung!");
+    const day = f.dataset.day, mine = ratingsOf(day).find(r => r.user_id === S.me.id);
+    if (S.goldDraft) {
+      const reason = f.reason.value.trim();
+      if (reason.length < 20) throw new Error("Bitte begründe den goldenen Löffel mit mindestens 20 Zeichen.");
+      const btn = f.querySelector("button.btn.senf");
+      if (f.dataset.sure !== "1") { f.dataset.sure = "1"; btn.textContent = `Wirklich? Dein einziger goldener Löffel ${day.slice(0, 4)} geht an ${cookNames(meal(day))}.`; return; }
+      await B.rate(day, 5, f.comment.value.trim(), true, reason);
+      S.goldDraft = false; S.draft = 0; S.cdraft = S.rdraft = undefined; await reload(); toast("Goldener Löffel vergeben!"); return;
+    }
+    await B.rate(day, S.draft, f.comment.value.trim(), !!mine?.gold, mine?.gold_reason || "");
+    S.draft = 0; S.cdraft = undefined; await reload(); toast("Danke für deine Bewertung!");
   },
   async nachtrag(f) {
     const day = f.day.value, wer = [...f.querySelectorAll('input[name="wer"]:checked')].map(x => x.value);

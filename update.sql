@@ -1,6 +1,7 @@
 -- KPT – Update vom 12.11.2026 (Stand: Nachmelden bis Donnerstag 18 Uhr, Gäste bis Freitag 12 Uhr,
 -- Bewerten ab Freitag 12:30 Uhr,
--- frühere Essen nachtragen, Teilnehmer von Hand eintragen). Einmal im Supabase "SQL Editor" ausführen.
+-- frühere Essen nachtragen, Teilnehmer von Hand eintragen,
+-- getrennte Einkaufsbeträge bei zwei Köchen, goldener Löffel ab 2027). Einmal im Supabase "SQL Editor" ausführen.
 -- Bringt jede frühere Fassung der Datenbank auf den aktuellen Stand; mehrfaches Ausführen schadet nicht.
 
 alter table public.rsvps add column if not exists late boolean not null default false;
@@ -165,3 +166,71 @@ drop policy if exists meals_update on public.meals;
 create policy meals_update on public.meals for update to authenticated
   using (is_member() and (auth.uid() in (cook1, cook2) or is_admin()))
   with check (is_member() and (auth.uid() in (cook1, cook2) or is_admin()));
+
+-- Getrennte Einkaufsbeträge bei zwei Köchen ("cost" = Koch 1, "cost2" = Koch 2)
+alter table public.meals add column if not exists cost2 numeric(8,2) check (cost2 is null or cost2 between 0 and 5000);
+grant update (cost2) on public.meals to authenticated;
+
+create or replace function public.release_friday(d date, who uuid default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  target uuid := coalesce(who, auth.uid());
+  m      meals;
+begin
+  if not is_member() then raise exception 'Nur für Mitglieder.'; end if;
+  if target <> auth.uid() and not is_admin() then raise exception 'Nur für Admins.'; end if;
+  if d < berlin_today() then raise exception 'Vergangene Freitage lassen sich nicht ändern.'; end if;
+
+  select * into m from meals where day = d for update;
+  if not found then return; end if;
+  if m.cook1 = target then
+    if m.cook2 is null then
+      delete from meals where day = d;
+    else
+      update meals set cook1 = m.cook2, cook2 = null, cost = m.cost2, cost2 = null where day = d;
+    end if;
+  elsif m.cook2 = target then
+    update meals set cook2 = null, cost2 = null where day = d;
+  end if;
+end $$;
+
+-- Goldener Löffel
+alter table public.ratings add column if not exists gold boolean not null default false;
+alter table public.ratings add column if not exists gold_reason text not null default '' check (char_length(gold_reason) <= 1000);
+alter table public.ratings drop constraint if exists ratings_gold_check;
+alter table public.ratings add constraint ratings_gold_check check (not gold or (spoons = 5 and char_length(btrim(gold_reason)) >= 20));
+create unique index if not exists ratings_gold_per_year on public.ratings (user_id, (extract(year from day))) where gold;
+
+-- Vergabe ab Essen vom 1. Januar 2027, jeweils ab Freitag 12:30 Uhr bis Donnerstag 23:59 Uhr danach
+create or replace function public.gold_open(d date) returns boolean
+language sql stable as $$
+  select d >= date '2027-01-01'
+     and public.rate_open(d)
+     and (now() at time zone 'Europe/Berlin') < (d + 7)::timestamp;
+$$;
+
+create or replace function public.ratings_gold() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'UPDATE' and old.gold then
+    if not new.gold or new.spoons <> 5 or new.gold_reason is distinct from old.gold_reason then
+      raise exception 'Ein goldener Löffel ist endgültig und lässt sich nicht mehr ändern.';
+    end if;
+    return new;
+  end if;
+  if new.gold then
+    if not public.gold_open(new.day) then
+      raise exception 'Goldene Löffel gibt es für Essen ab dem 1. Januar 2027, jeweils bis zum Donnerstag nach dem Essen.';
+    end if;
+    if exists (select 1 from public.ratings r
+               where r.user_id = new.user_id and r.gold and r.day <> new.day
+                 and extract(year from r.day) = extract(year from new.day)) then
+      raise exception 'Du hast deinen goldenen Löffel für % schon vergeben.', extract(year from new.day);
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists ratings_gold on public.ratings;
+create trigger ratings_gold before insert or update on public.ratings
+  for each row execute function public.ratings_gold();
+
