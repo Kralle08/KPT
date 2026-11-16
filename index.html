@@ -41,7 +41,7 @@ header.top .logo{font:800 22px/1 var(--display);letter-spacing:.02em;color:var(-
 header.top .sub{font-size:13px;opacity:.8;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .demo{background:var(--senf);color:var(--tinte);font-size:13px;font-weight:600;text-align:center;padding:5px 12px}
 main{flex:1;padding:16px 14px calc(92px + env(safe-area-inset-bottom))}
-main.chat{padding-bottom:0;display:flex;flex-direction:column}
+main.chat{padding-bottom:var(--navh,calc(70px + env(safe-area-inset-bottom)));display:flex;flex-direction:column}
 
 nav.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:560px;z-index:6;
   background:var(--emaille);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
@@ -170,7 +170,7 @@ input.ein:focus,textarea.ein:focus,select.ein:focus{outline:none;border-color:va
 .msg.ich time{color:#b9d0cd}
 .msg .x{color:var(--grau);font-size:18px;padding:4px}
 .tagtrenner{align-self:center;font-size:12.5px;font-weight:600;color:var(--grau);background:#fff;border-radius:99px;padding:3px 10px;margin:8px 0 2px;box-shadow:0 0 0 1px var(--linie)}
-form.senden{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));display:flex;gap:8px;padding:8px 0 10px;background:linear-gradient(transparent,var(--kachel) 30%)}
+form.senden{position:sticky;bottom:var(--navh,calc(70px + env(safe-area-inset-bottom)));display:flex;gap:8px;padding:8px 0 10px;background:linear-gradient(transparent,var(--kachel) 30%)}
 form.senden textarea{flex:1;min-height:46px;max-height:120px;padding:11px 14px;border:1.5px solid var(--linie);border-radius:23px;resize:none;background:#fff;font-size:16px}
 form.senden button{width:46px;height:46px;border-radius:50%;background:var(--senf);flex:none;display:grid;place-items:center}
 
@@ -199,7 +199,7 @@ form.senden button{width:46px;height:46px;border-radius:50%;background:var(--sen
 .tor .wechsel{margin-top:16px;text-align:center;font-size:15px}
 .tor .wechsel button{color:var(--senf);font-weight:700;text-decoration:underline;text-underline-offset:3px}
 
-#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;
+#toast{position:fixed;left:50%;bottom:calc(var(--navh,calc(70px + env(safe-area-inset-bottom))) + 16px);transform:translateX(-50%);z-index:60;
   background:var(--tinte);color:#fff;padding:11px 16px;border-radius:12px;font-weight:600;font-size:14.5px;max-width:min(92vw,480px);
   text-align:center;box-shadow:0 8px 24px -8px rgba(0,0,0,.5)}
 #toast.fehler{background:var(--tomate)}
@@ -588,9 +588,13 @@ function render() {
     <main class="${S.tab === "chat" ? "chat" : ""}">${({ start: viewStart, kalender: viewKalender, essen: viewEssen, chat: viewChat, ranking: viewRanking })[S.tab]()}</main>
     <nav class="tabs" aria-label="Bereiche">${TABS.map(([id, label]) => `<button data-act="tab" data-tab="${id}" ${S.tab === id ? 'aria-current="page"' : ""}>${ICON[id]}${label}${id === "chat" && unread ? '<span class="dot"></span>' : ""}</button>`).join("")}</nav>
   </div>${S.sheet ? viewSheet() : ""}`;
+  navHoehe();
   if (S.tab === "chat" && !S.sheet) { scrollChat(); if (S.messages.length) store.set("kpt-gelesen", String(S.messages.at(-1).id)); }
 }
 const scrollChat = () => window.scrollTo(0, document.body.scrollHeight);
+// Höhe der unteren Leiste messen (auf dem iPhone kommt der Abstand zum Home-Balken dazu)
+function navHoehe() { const n = document.querySelector("nav.tabs"); if (n) document.documentElement.style.setProperty("--navh", n.offsetHeight + "px"); }
+addEventListener("resize", navHoehe);
 
 // ---------- Anmelden / Beitreten ----------
 function viewGate() {
