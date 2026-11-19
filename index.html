@@ -849,7 +849,7 @@ function sheetMeal(day) {
   h += `<div class="block"><h3>Rezept</h3>${m.recipe ? `<div class="rezept">${esc(m.recipe)}</div>` : `<p style="color:var(--grau);margin:0">${cook ? "Du hast noch kein Rezept eingetragen." : "Noch kein Rezept eingetragen."}</p>`}</div>`;
   // Fotos
   h += `<div class="block"><h3>Fotos</h3><div class="fotos">${ph.map(p => { const rs = reactionsOf(p.id); return `<div><div class="f"><button data-act="bild" data-id="${p.id}" data-url="${esc(p.url)}" style="display:block;width:100%;height:100%"><img src="${esc(p.url)}" alt="Foto von ${esc(member(p.user_id).name)}" loading="lazy"></button>${p.user_id === S.me.id || S.me.is_admin ? `<button class="weg" data-act="fotoweg" data-id="${p.id}" aria-label="Foto löschen">×</button>` : ""}</div>
-      ${reaktZeile(p.id)}</div></div>`; }).join("")}
+      ${reaktZeile(p.id)}</div>`; }).join("")}
     <label>Foto hinzufügen<input type="file" accept="image/*" multiple hidden data-day="${day}" id="fotoein"></label></div></div>`;
   return h;
 }
