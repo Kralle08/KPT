@@ -604,6 +604,10 @@ const TABS = [["start", "Freitag"], ["kalender", "Kalender"], ["essen", "Essen"]
 
 function render() {
   const root = $("#root");
+  // Scrollposition im geöffneten Blatt merken, damit es beim Neuzeichnen nicht nach oben springt
+  const altesBlatt = $(".blatt .innen"), blattKey = S.sheet ? `${S.sheet.type}|${S.sheet.day}|${!!S.sheet.edit}` : null;
+  const blattPos = altesBlatt && blattKey === render.key ? altesBlatt.scrollTop : 0;
+  render.key = blattKey;
   if (S.gate) { root.innerHTML = viewGate(); return; }
   const unread = S.messages.length && S.tab !== "chat" && String(S.messages.at(-1).id) !== store.get("kpt-gelesen") && S.messages.at(-1).user_id !== S.me.id;
   const mine = balances().get(S.me.id) || 0;
@@ -616,6 +620,7 @@ function render() {
     <nav class="tabs" aria-label="Bereiche">${TABS.map(([id, label]) => `<button data-act="tab" data-tab="${id}" ${S.tab === id ? 'aria-current="page"' : ""}>${ICON[id]}${label}${id === "chat" && unread ? '<span class="dot"></span>' : ""}</button>`).join("")}</nav>
   </div>${S.sheet ? viewSheet() : ""}`;
   navHoehe();
+  if (blattPos) { const n = $(".blatt .innen"); if (n) { n.style.animation = "none"; n.scrollTop = blattPos; } }
   if (S.tab === "chat" && !S.sheet) { scrollChat(); if (S.messages.length) store.set("kpt-gelesen", String(S.messages.at(-1).id)); }
 }
 const scrollChat = () => window.scrollTo(0, document.body.scrollHeight);
