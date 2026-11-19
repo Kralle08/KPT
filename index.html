@@ -141,10 +141,15 @@ h2.abschnitt{font-size:20px;font-weight:700;margin:22px 4px 10px}
 .block h3{font-size:17px;font-weight:700;margin-bottom:8px}
 .block p{margin:0 0 8px}
 .rezept{white-space:pre-wrap;overflow-wrap:anywhere}
-.fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fotos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 6px;align-items:start}
 .fotos .f{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--holz-hell)}
 .fotos img{width:100%;height:100%;object-fit:cover;display:block}
 .fotos .weg{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;background:rgba(21,32,31,.7);color:#fff;font-size:16px}
+.reakt{display:flex;gap:2px;margin-top:5px}
+.reakt button{flex:1;min-height:32px;border-radius:99px;background:#fff;box-shadow:inset 0 0 0 1px var(--linie);font-size:13px;display:flex;align-items:center;justify-content:center;gap:1px;padding:0 1px;line-height:1;min-width:0}
+.reakt button[aria-pressed="true"]{background:#e3efe9;box-shadow:inset 0 0 0 1.5px var(--emaille)}
+.reakt b{font:700 11.5px var(--text);color:var(--tinte);font-variant-numeric:tabular-nums}
+.gross-bild .wer-reagiert{position:absolute;left:0;right:0;bottom:0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.85) 35%);color:#fff;font-size:14.5px;line-height:1.5}
 .fotos label{aspect-ratio:1;border-radius:10px;border:2px dashed var(--holz);display:grid;place-items:center;text-align:center;
   font-size:13.5px;font-weight:700;color:var(--holz);cursor:pointer;padding:6px}
 .gross-bild{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.92);display:grid;place-items:center}
@@ -282,7 +287,7 @@ function toast(msg, fehler = false) {
 
 // ---------- Zustand ----------
 const S = {
-  me: null, members: [], meals: [], rsvps: [], ratings: [], photos: [], payments: [], messages: [], push: null,
+  me: null, members: [], meals: [], rsvps: [], ratings: [], photos: [], payments: [], reactions: [], messages: [], push: null,
   tab: "start", sheet: null, weeks: 12, board: "beste", invite: null, auth: "login", gate: null, draft: 0
 };
 const member = id => S.members.find(m => m.id === id) || { id, name: "Ehemaliges Mitglied" };
@@ -301,6 +306,8 @@ const goldOpen = day => day >= goldStart() && rateOpen(day) && new Date() < pars
 const myGold = year => S.ratings.find(r => r.user_id === S.me.id && r.gold && r.day.slice(0, 4) === year);
 const goldMark = n => n ? `<span class="goldmark">${GOLD_SPOON}${n > 1 ? n + "× " : ""}Gold</span>` : "";
 const photosOf = day => S.photos.filter(p => p.day === day);
+const EMOJIS = ["👍", "😋", "❤️"];
+const reactionsOf = id => S.reactions.filter(r => String(r.photo_id) === String(id));
 const mayRate = m => m && rateOpen(m.day) && !isCook(m) && myRsvp(m.day)?.coming;
 const activeMembers = () => S.members.filter(m => m.active);
 const portionsOf = r => 1 + (r.guests || 0);
@@ -365,7 +372,7 @@ function demoBackend() {
   ];
   const plate = h => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="hsl(${h},28%,82%)"/><circle cx="100" cy="100" r="78" fill="#fffdf6"/><circle cx="100" cy="100" r="58" fill="#f1ece0"/><circle cx="84" cy="92" r="26" fill="hsl(${h},55%,45%)"/><circle cx="118" cy="110" r="22" fill="hsl(${(h + 40) % 360},50%,55%)"/><circle cx="104" cy="78" r="12" fill="hsl(${(h + 100) % 360},45%,45%)"/></svg>`);
   const nf = nextFriday();
-  const db = { meals: [], rsvps: [], ratings: [], photos: [], messages: [], payments: [] };
+  const db = { meals: [], rsvps: [], ratings: [], photos: [], messages: [], payments: [], reactions: [] };
   const comments = ["Sehr lecker, gerne wieder!", "Hätte etwas mehr Würze vertragen.", "Bestes Essen seit Wochen.", "Solide Hausmannskost.", "Die Soße war ein Gedicht.", "", "", ""];
   dishes.forEach((d, i) => {
     const day = addDays(nf, -7 * (dishes.length - i));
@@ -386,6 +393,7 @@ function demoBackend() {
   members.forEach((m, i) => { if (m.id === "m4") db.rsvps.push({ day: nf, user_id: m.id, coming: true, guests: 0 }); else if (i && i < 11) db.rsvps.push({ day: nf, user_id: m.id, coming: i % 5 !== 0, guests: i === 3 ? 2 : 0, late: i === 8 && !softOpen(nf) }); });
   { const r = db.ratings.find(x => x.day === db.meals[0].day && x.user_id !== "me");   // ein goldener Löffel als Beispiel
     if (r) Object.assign(r, { spoons: 5, gold: true, gold_reason: "Die besten Rouladen, die ich je gegessen habe. Die Soße allein war schon Gold wert." }); }
+  db.photos.forEach((ph, i) => members.slice(1, 2 + (i * 5) % 9).forEach((m, k) => db.reactions.push({ photo_id: ph.id, user_id: m.id, emoji: EMOJIS[(i + k) % 3] })));
   db.payments.push({ id: 1, from_user: "me", to_user: "m1", amount: 20, created_by: "me", created_at: addDays(nf, -20) + "T12:00:00" },
                    { id: 2, from_user: "m5", to_user: "m4", amount: 12.5, created_by: "m4", created_at: addDays(nf, -9) + "T12:00:00" });
   const t = (d, h) => { const x = new Date(); x.setDate(x.getDate() - d); x.setHours(h, 12, 0, 0); return x.toISOString(); };
@@ -400,7 +408,7 @@ function demoBackend() {
   return {
     demo: true,
     init: () => ok({ signedIn: true, profile: members[0] }),
-    loadAll: () => ok({ members: [...members], meals: [...db.meals], rsvps: [...db.rsvps], ratings: [...db.ratings], photos: [...db.photos], payments: [...db.payments] }),
+    loadAll: () => ok({ members: [...members], meals: [...db.meals], rsvps: [...db.rsvps], ratings: [...db.ratings], photos: [...db.photos], payments: [...db.payments], reactions: [...db.reactions] }),
     loadMessages: () => ok([...db.messages]),
     subscribe(m) { onMsg = m; },
     async sendMessage(body) { const m = { id: ++mid, user_id: "me", body, created_at: new Date().toISOString() }; db.messages.push(m); onMsg(m); },
@@ -441,7 +449,11 @@ function demoBackend() {
       db.ratings.push({ day, user_id: "me", spoons, comment, gold, gold_reason, created_at: new Date().toISOString() });
     },
     async addPhoto(day, blob) { db.photos.push({ id: "p" + Date.now(), day, user_id: "me", url: URL.createObjectURL(blob), created_at: new Date().toISOString() }); },
-    async deletePhoto(p) { db.photos = db.photos.filter(x => x.id !== p.id); },
+    async deletePhoto(p) { db.photos = db.photos.filter(x => x.id !== p.id); db.reactions = db.reactions.filter(r => r.photo_id !== p.id); },
+    async react(photo_id, emoji, on) {
+      db.reactions = db.reactions.filter(r => !(r.photo_id === photo_id && r.user_id === "me" && r.emoji === emoji));
+      if (on) db.reactions.push({ photo_id, user_id: "me", emoji });
+    },
     async updateName(name) { members[0].name = name; },
     async setNotify(k, v) { members[0][k] = v; },
     getInvite: () => ok(invite),
@@ -515,9 +527,9 @@ function liveBackend() {
     async signOut() { await sb.auth.signOut(); uid = null; },
     async join(code, name) { ok(await sb.rpc("join_club", { code, member_name: name })); return this.who(); },
     async loadAll() {
-      const [members, meals, rsvps, ratings, photos, payments] = await Promise.all([all("profiles", "created_at"), all("meals", "day"), all("rsvps", "day"), all("ratings", "day"), all("photos", "created_at"), all("payments", "created_at")]);
+      const [members, meals, rsvps, ratings, photos, payments, reactions] = await Promise.all([all("profiles", "created_at"), all("meals", "day"), all("rsvps", "day"), all("ratings", "day"), all("photos", "created_at"), all("payments", "created_at"), all("photo_reactions", "created_at").catch(() => [])]);
       photos.forEach(p => (p.url = url(p.path)));
-      return { members, meals, rsvps, ratings, photos, payments };
+      return { members, meals, rsvps, ratings, photos, payments, reactions };
     },
     async loadMessages() { return ok(await sb.from("messages").select("*").order("created_at", { ascending: false }).limit(300)).reverse(); },
     subscribe(onMsg, onData) {
@@ -549,6 +561,10 @@ function liveBackend() {
       ok(await sb.from("photos").insert({ day, user_id: uid, path }));
     },
     async deletePhoto(p) { ok(await sb.from("photos").delete().eq("id", p.id)); await sb.storage.from("fotos").remove([p.path]); },
+    async react(photo_id, emoji, on) {
+      if (on) { const r = await sb.from("photo_reactions").insert({ photo_id, user_id: uid, emoji }); if (r.error && !/duplicate|23505/.test(`${r.error.code} ${r.error.message}`)) ok(r); }
+      else ok(await sb.from("photo_reactions").delete().eq("photo_id", photo_id).eq("user_id", uid).eq("emoji", emoji));
+    },
     async updateName(name) { ok(await sb.from("profiles").update({ name }).eq("id", uid)); },
     async setNotify(k, v) { ok(await sb.from("profiles").update({ [k]: v }).eq("id", uid)); },
     async getInvite() { return ok(await sb.rpc("get_invite_code")); },
@@ -821,7 +837,9 @@ function sheetMeal(day) {
   // Rezept
   h += `<div class="block"><h3>Rezept</h3>${m.recipe ? `<div class="rezept">${esc(m.recipe)}</div>` : `<p style="color:var(--grau);margin:0">${cook ? "Du hast noch kein Rezept eingetragen." : "Noch kein Rezept eingetragen."}</p>`}</div>`;
   // Fotos
-  h += `<div class="block"><h3>Fotos</h3><div class="fotos">${ph.map(p => `<div class="f"><button data-act="bild" data-url="${esc(p.url)}" style="display:block;width:100%;height:100%"><img src="${esc(p.url)}" alt="Foto von ${esc(member(p.user_id).name)}" loading="lazy"></button>${p.user_id === S.me.id || S.me.is_admin ? `<button class="weg" data-act="fotoweg" data-id="${p.id}" aria-label="Foto löschen">×</button>` : ""}</div>`).join("")}
+  h += `<div class="block"><h3>Fotos</h3><div class="fotos">${ph.map(p => { const rs = reactionsOf(p.id); return `<div><div class="f"><button data-act="bild" data-id="${p.id}" data-url="${esc(p.url)}" style="display:block;width:100%;height:100%"><img src="${esc(p.url)}" alt="Foto von ${esc(member(p.user_id).name)}" loading="lazy"></button>${p.user_id === S.me.id || S.me.is_admin ? `<button class="weg" data-act="fotoweg" data-id="${p.id}" aria-label="Foto löschen">×</button>` : ""}</div>
+      <div class="reakt">${EMOJIS.map(e => { const n = rs.filter(r => r.emoji === e).length, an = rs.some(r => r.emoji === e && r.user_id === S.me.id);
+        return `<button data-act="reakt" data-id="${p.id}" data-e="${e}" aria-pressed="${an}" aria-label="${e} ${n}" title="${esc(rs.filter(r => r.emoji === e).map(r => member(r.user_id).name).join(", "))}">${e}${n ? `<b>${n}</b>` : ""}</button>`; }).join("")}</div></div>`; }).join("")}
     <label>Foto hinzufügen<input type="file" accept="image/*" multiple hidden data-day="${day}" id="fotoein"></label></div></div>`;
   return h;
 }
@@ -953,7 +971,19 @@ const ACT = {
   edit(el) { S.sheet.edit = el.dataset.v === "1"; render(); },
   goldwahl() { const f = document.querySelector('form[data-form="rate"]'); S.cdraft = f?.comment.value; S.rdraft = f?.reason?.value; S.goldDraft = !S.goldDraft; if (!S.goldDraft) S.draft = 0; render(); },
   spoon(el) { if (S.goldDraft) return; S.draft = +el.dataset.n; document.querySelectorAll("#wahl button").forEach(b => b.classList.toggle("aus", +b.dataset.n > S.draft)); },
-  bild(el) { const d = document.createElement("div"); d.className = "gross-bild"; d.innerHTML = `<img src="${esc(el.dataset.url)}" alt="">`; d.onclick = () => d.remove(); document.body.append(d); },
+  bild(el) {
+    const rs = reactionsOf(el.dataset.id), zeilen = EMOJIS.map(e => [e, rs.filter(r => r.emoji === e).map(r => esc(member(r.user_id).name))]).filter(([, n]) => n.length).map(([e, n]) => `${e} ${n.join(", ")}`);
+    const d = document.createElement("div"); d.className = "gross-bild";
+    d.innerHTML = `<img src="${esc(el.dataset.url)}" alt="">${zeilen.length ? `<div class="wer-reagiert">${zeilen.join("<br>")}</div>` : ""}`;
+    d.onclick = () => d.remove(); document.body.append(d);
+  },
+  reakt(el) {
+    const id = el.dataset.id, e = el.dataset.e, mineIdx = S.reactions.findIndex(r => String(r.photo_id) === id && r.user_id === S.me.id && r.emoji === e), on = mineIdx < 0;
+    const pid = (S.photos.find(p => String(p.id) === id) || {}).id ?? id;
+    if (on) S.reactions.push({ photo_id: pid, user_id: S.me.id, emoji: e }); else S.reactions.splice(mineIdx, 1);
+    render();
+    B.react(pid, e, on).catch(err => { toast(err.message || "Das hat nicht geklappt.", true); reload().catch(() => {}); });
+  },
   fotoweg(el) {
     if (el.dataset.sure !== "1") { el.dataset.sure = "1"; el.textContent = "?"; el.style.background = "var(--tomate)"; return; }
     const p = S.photos.find(x => String(x.id) === el.dataset.id); run("foto", () => B.deletePhoto(p), "Foto gelöscht.");

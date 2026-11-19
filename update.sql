@@ -2,7 +2,7 @@
 -- Bewerten ab Freitag 12:30 Uhr,
 -- frühere Essen nachtragen, Teilnehmer von Hand eintragen,
 -- getrennte Einkaufsbeträge bei zwei Köchen, goldener Löffel ab 2027,
--- Mitteilungen über Supabase). Einmal im Supabase "SQL Editor" ausführen.
+-- Mitteilungen über Supabase, Reaktionen auf Fotos). Einmal im Supabase "SQL Editor" ausführen.
 -- Bringt jede frühere Fassung der Datenbank auf den aktuellen Stand; mehrfaches Ausführen schadet nicht.
 
 alter table public.rsvps add column if not exists late boolean not null default false;
@@ -448,3 +448,32 @@ revoke execute on function public.kpt_claim(text), public.kpt_due_messages(), pu
   from public, anon, authenticated;
 
 select cron.schedule('kpt-mitteilungen', '* * * * *', 'select public.kpt_tick()');
+
+-- ---------- Reaktionen auf Fotos (👍 😋 ❤️) ----------------------------
+create table if not exists public.photo_reactions (
+  photo_id   uuid not null references public.photos (id) on delete cascade,
+  user_id    uuid not null references public.profiles (id) on delete cascade,
+  emoji      text not null check (emoji in ('👍', '😋', '❤️')),
+  created_at timestamptz not null default now(),
+  primary key (photo_id, user_id, emoji)
+);
+alter table public.photo_reactions enable row level security;
+revoke all on public.photo_reactions from anon;
+revoke update on public.photo_reactions from authenticated;
+
+drop policy if exists photo_reactions_select on public.photo_reactions;
+create policy photo_reactions_select on public.photo_reactions for select to authenticated
+  using (is_member());
+drop policy if exists photo_reactions_insert on public.photo_reactions;
+create policy photo_reactions_insert on public.photo_reactions for insert to authenticated
+  with check (user_id = auth.uid() and is_member());
+drop policy if exists photo_reactions_delete on public.photo_reactions;
+create policy photo_reactions_delete on public.photo_reactions for delete to authenticated
+  using (user_id = auth.uid() and is_member());
+
+do $$ begin
+  if not exists (select 1 from pg_publication_tables
+                  where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'photo_reactions') then
+    alter publication supabase_realtime add table public.photo_reactions;
+  end if;
+end $$;
