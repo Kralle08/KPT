@@ -1,8 +1,9 @@
--- KPT – Update vom 12.11.2026 (Stand: Nachmelden bis Donnerstag 18 Uhr, Gäste bis Freitag 12 Uhr,
+-- KPT – Update vom 20.11.2026 (Stand: Nachmelden bis Donnerstag 18 Uhr, Gäste bis Freitag 12 Uhr,
 -- Bewerten ab Freitag 12:30 Uhr,
 -- frühere Essen nachtragen, Teilnehmer von Hand eintragen,
 -- getrennte Einkaufsbeträge bei zwei Köchen, goldener Löffel ab 2027,
--- Mitteilungen über Supabase, Reaktionen auf Fotos). Einmal im Supabase "SQL Editor" ausführen.
+-- Mitteilungen über Supabase, Reaktionen auf Fotos,
+-- Erinnerung zum Bewerten Freitag 19 Uhr). Einmal im Supabase "SQL Editor" ausführen.
 -- Bringt jede frühere Fassung der Datenbank auf den aktuellen Stand; mehrfaches Ausführen schadet nicht.
 
 alter table public.rsvps add column if not exists late boolean not null default false;
@@ -356,6 +357,20 @@ begin
                'kpt-endstand'::text
           from profiles p
          where p.active and p.notify_friday and p.id in (m.cook1, coalesce(m.cook2, m.cook1));
+    end if;
+
+    -- Freitag ab 19 Uhr: an alle, die mitgegessen und noch nicht bewertet haben
+    if extract(isodow from n) = 5 and n::time >= time '19:00'
+       and public.kpt_claim('bewerten:' || fri) then
+      return query
+        select p.id, 'KPT: Wie hat es dir geschmeckt?'::text,
+               'Du hast heute ' || coalesce(nullif(m.title, ''), 'das Essen') || ' von ' || koeche
+               || ' noch nicht bewertet. Ein paar Kochlöffel dauern nur Sekunden.',
+               'kpt-bewerten'::text
+          from profiles p
+          join rsvps r on r.day = fri and r.user_id = p.id and r.coming
+         where p.active and p.notify_friday and p.id not in (m.cook1, coalesce(m.cook2, m.cook1))
+           and not exists (select 1 from ratings x where x.day = fri and x.user_id = p.id);
     end if;
   end if;
 

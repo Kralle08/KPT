@@ -904,7 +904,7 @@ function sheetProfil() {
         ? `<p style="margin:0 0 12px;color:var(--grau)">Auf diesem Gerät sind Mitteilungen hier nicht möglich. Auf dem iPhone: die App zuerst über „Teilen“ zum Home-Bildschirm hinzufügen und von dort öffnen.</p>`
         : `<div class="reihe" style="margin:0 0 12px"><button class="btn klein ${S.push ? "hell" : "senf"}" data-act="${S.push ? "pushaus" : "pushan"}">${S.push ? "Auf diesem Gerät ausschalten" : "Auf diesem Gerät einschalten"}</button></div>`}
       <p style="color:var(--grau);font-size:14.5px;margin:0 0 4px">Was möchtest du bekommen?</p>
-      ${[["notify_friday", "Erinnerungen zum Freitag", "Mittwoch 15 Uhr, falls du noch nicht geantwortet hast. Als Koch: Donnerstag früh die Portionen, abends den Endstand."],
+      ${[["notify_friday", "Erinnerungen zum Freitag", "Mittwoch 15 Uhr, falls du noch nicht geantwortet hast. Freitag 19 Uhr, falls du noch nicht bewertet hast. Als Koch: Donnerstag früh die Portionen, abends den Endstand."],
          ["notify_chat", "Neue Chatnachrichten", "Gebündelt, wenn mehrere kurz hintereinander schreiben."],
          ["notify_photos", "Neue Fotos", "Wenn jemand Fotos zu einem Essen teilt."]].map(([k, t, d]) => `
         <label style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--linie);cursor:pointer">
