@@ -88,6 +88,12 @@ nav.tabs .dot{position:absolute;top:4px;left:calc(50% + 8px);width:9px;height:9p
 .rsvp .btn[aria-pressed="true"].nein{background:var(--tomate);color:#fff;box-shadow:none}
 .frist{font-size:13.5px;color:var(--grau);margin:10px 0 0}
 .frist.dicht{color:var(--tomate);font-weight:600}
+details.ausgleich summary{cursor:pointer;list-style:none;display:block;position:relative;padding-right:30px}
+details.ausgleich summary::-webkit-details-marker{display:none}
+details.ausgleich summary::after{content:"";position:absolute;right:4px;top:6px;width:9px;height:9px;border-right:2.2px solid var(--emaille);border-bottom:2.2px solid var(--emaille);transform:rotate(45deg);transition:transform .15s}
+details.ausgleich[open] summary::after{transform:rotate(-135deg);top:10px}
+details.ausgleich summary h3{margin-bottom:2px}
+details.ausgleich summary small{color:var(--grau);font-size:13.5px;display:block}
 details.wer{margin-top:12px;font-size:14.5px}
 details.wer summary{cursor:pointer;font-weight:700;color:var(--emaille);list-style:none}
 details.wer summary::-webkit-details-marker{display:none}
@@ -882,9 +888,9 @@ function sheetKasse() {
   const offen = S.meals.filter(m => m.day <= today() && totalCost(m) == null).length;
   const zahlungen = [...S.payments].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, 15);
   return `<div class="leiste"><span>Clubkasse</span><button class="zu" data-act="zu" aria-label="Schließen">×</button></div>
-    <div class="stand"><small>Dein Stand</small><b>${euroPlus(mine)}</b><small>${mine < 0 ? "Diesen Betrag schuldest du der Runde." : mine > 0 ? "Diesen Betrag bekommst du noch." : "Du bist ausgeglichen."}</small></div>
-    <div class="block"><h3>So gleicht ihr aus</h3>${plan.length ? meins.map(zeile).join("") + rest.map(zeile).join("") : `<p style="margin:0;color:var(--grau)">Alles ausgeglichen. Niemand schuldet etwas.</p>`}</div>
+    <div class="stand"><small>Dein Stand</small><b>${euroPlus(mine)}</b><small>${mine < 0 ? "Du liegst im Minus. Das gleicht sich aus, wenn du das nächste Mal kochst." : mine > 0 ? "Du liegst im Plus. Die nächsten Essen gleichen das aus." : "Du bist ausgeglichen."}</small></div>
     <div class="block"><h3>Alle Kontostände</h3>${[...bal].filter(([id, c]) => c || member(id).active).sort((a, b) => b[1] - a[1]).map(([id, c]) => `<div class="stimme" style="align-items:center">${avatar(member(id), "s")}<div style="flex:1"><b>${esc(member(id).name)}</b></div><span class="betrag ${c < 0 ? "minus" : c > 0 ? "plus" : ""}">${euroPlus(c)}</span></div>`).join("")}</div>
+    <details class="block ausgleich" ${S.ausOffen ? "open" : ""}><summary><h3>Komplett ausgleichen</h3><small>Nur nötig, wenn jemand aufhört oder ihr reinen Tisch machen wollt. Sonst gleicht sich die Kasse übers Kochen aus.</small></summary><div style="margin-top:10px">${plan.length ? meins.map(zeile).join("") + rest.map(zeile).join("") : `<p style="margin:0;color:var(--grau)">Alles ausgeglichen. Niemand schuldet etwas.</p>`}</div></details>
     <div class="block"><h3>Letzte Zahlungen</h3>${zahlungen.length ? zahlungen.map(p => `<div class="stimme" style="align-items:center"><div style="flex:1"><b>${esc(member(p.from_user).name)}</b> an <b>${esc(member(p.to_user).name)}</b><br><small style="color:var(--grau)">${new Date(p.created_at).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })}</small></div><span class="betrag">${euro(cents(p.amount))}</span>
       ${p.created_by === me || S.me.is_admin ? `<button class="btn klein rot" data-act="zahlweg" data-id="${p.id}" aria-label="Zahlung löschen">Löschen</button>` : ""}</div>`).join("") : `<p style="margin:0;color:var(--grau)">Noch keine Zahlungen eingetragen.</p>`}</div>
     <p class="hinweis">Die Einkaufskosten eines Freitags werden nach Anmeldeschluss am Donnerstagabend auf alle Portionen verteilt. Gäste zählen bei dem Mitglied, das sie mitbringt. Wer kocht, bekommt gutgeschrieben, was er ausgelegt hat; bei zwei Köchen trägt jeder seinen eigenen Betrag ein.${offen ? ` Für ${offen} Essen fehlen noch die Einkaufskosten.` : ""}</p>`;
@@ -1021,6 +1027,7 @@ document.addEventListener("click", ev => {
   const el = ev.target.closest("[data-act]"); if (!el) return;
   ACT[el.dataset.act]?.(el, ev);
 });
+document.addEventListener("toggle", ev => { if (ev.target.classList?.contains("ausgleich")) S.ausOffen = ev.target.open; }, true);
 document.addEventListener("keydown", ev => {
   if (ev.key === "Escape" && S.sheet) closeSheet();
   if (ev.key === "Enter" && !ev.shiftKey && ev.target.matches("form.senden textarea")) { ev.preventDefault(); ev.target.form.requestSubmit(); }
