@@ -78,6 +78,10 @@ nav.tabs .dot{position:absolute;top:4px;left:calc(50% + 8px);width:9px;height:9p
 .bon h2{font-size:clamp(28px,8.4vw,38px);font-weight:800;margin:10px 0 6px;text-wrap:balance}
 .bon .koch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:600}
 .bon p.desc{margin:10px 0 0;color:#3b4744}
+.bonfotos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:14px}
+.bonfotos button{aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--holz-hell)}
+.bonfotos img{width:100%;height:100%;object-fit:cover;display:block}
+.bonfotos .mehr{font:800 20px var(--display);color:var(--emaille);background:var(--kachel)}
 .riss{border:0;border-top:2px dashed #cfc7ae;margin:16px -18px}
 .zahl{display:flex;align-items:flex-end;gap:12px}
 .zahl b{font:800 56px/.85 var(--display);font-variant-numeric:tabular-nums}
@@ -673,6 +677,12 @@ function rsvpBlock(day) {
       <dt>Dabei (${yes.length})</dt><dd>${names(yes)}</dd><dt>Abgemeldet (${no.length})</dt><dd>${names(no)}</dd>
       ${open ? `<dt>Ohne Antwort (${offen.length})</dt><dd>${names(offen)}</dd>` : ""}</dl></details>`;
 }
+// Fotos auf der Freitags-Karte: bis zu 4 Vorschaubilder, der Rest über „+N“
+function bonFotos(day) {
+  const ph = photosOf(day); if (!ph.length) return "";
+  const zeig = ph.length > 4 ? ph.slice(0, 3) : ph, rest = ph.length - zeig.length;
+  return `<div class="bonfotos">${zeig.map(p => `<button data-act="bild" data-id="${p.id}" data-url="${esc(p.url)}" aria-label="Foto groß anzeigen"><img src="${esc(p.url)}" alt="" loading="lazy"></button>`).join("")}${rest ? `<button class="mehr" data-act="open" data-day="${day}" aria-label="Alle ${ph.length} Fotos anzeigen">+${rest}</button>` : ""}</div>`;
+}
 function viewStart() {
   const day = nextFriday(), m = meal(day), heute = day === today();
   const kopf = `<div class="kopf"><span>${heute ? "Heute" : "Nächster Freitag"}</span><span>${fmt(day, { day: "numeric", month: "long", year: "numeric" })}</span></div>`;
@@ -680,6 +690,7 @@ function viewStart() {
       <h2>${esc(m.title || "Gericht noch geheim")}</h2>
       <div class="koch">${cooks(m).map(id => avatar(member(id), "s")).join("")}<span>${esc(cookNames(m))} ${cooks(m).length > 1 ? "kochen" : "kocht"}</span></div>
       ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
+      ${bonFotos(day)}
       <hr class="riss">${rsvpBlock(day)}
       <hr class="riss"><div class="reihe" style="margin-top:0"><button class="btn klein hell" data-act="open" data-day="${day}">${isCook(m) ? "Gericht und Rezept bearbeiten" : "Details, Rezept und Fotos"}</button>${!isCook(m) && !m.cook2 ? `<button class="btn klein hell" data-act="claim" data-day="${day}">Mitkochen</button>` : ""}</div>
     </section>` : `<section class="bon">${kopf}
