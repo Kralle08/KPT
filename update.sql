@@ -1,9 +1,9 @@
--- KPT – Update vom 20.11.2026 (Stand: Nachmelden bis Donnerstag 18 Uhr, Gäste bis Freitag 12 Uhr,
+-- KPT – Update vom 27.11.2026 (Stand: Nachmelden bis Donnerstag 18 Uhr, Gäste bis Freitag 12 Uhr,
 -- Bewerten ab Freitag 12:30 Uhr,
 -- frühere Essen nachtragen, Teilnehmer von Hand eintragen,
 -- getrennte Einkaufsbeträge bei zwei Köchen, goldener Löffel ab 2027,
 -- Mitteilungen über Supabase, Reaktionen auf Fotos,
--- Erinnerung zum Bewerten Freitag 19 Uhr). Einmal im Supabase "SQL Editor" ausführen.
+-- Erinnerung zum Bewerten Freitag 18 Uhr). Einmal im Supabase "SQL Editor" ausführen.
 -- Bringt jede frühere Fassung der Datenbank auf den aktuellen Stand; mehrfaches Ausführen schadet nicht.
 
 alter table public.rsvps add column if not exists late boolean not null default false;
@@ -359,13 +359,14 @@ begin
          where p.active and p.notify_friday and p.id in (m.cook1, coalesce(m.cook2, m.cook1));
     end if;
 
-    -- Freitag ab 19 Uhr: an alle, die mitgegessen und noch nicht bewertet haben
-    if extract(isodow from n) = 5 and n::time >= time '19:00'
+    -- Freitag ab 18 Uhr: an alle, die mitgegessen und noch nicht bewertet haben
+    if extract(isodow from n) = 5 and n::time >= time '18:00'
        and public.kpt_claim('bewerten:' || fri) then
       return query
-        select p.id, 'KPT: Wie hat es dir geschmeckt?'::text,
-               'Du hast heute ' || coalesce(nullif(m.title, ''), 'das Essen') || ' von ' || koeche
-               || ' noch nicht bewertet. Ein paar Kochlöffel dauern nur Sekunden.',
+        select p.id, 'KPT: Sag mal, hat es dir nicht geschmeckt? 🤔'::text,
+               'Oder warum sehen wir noch keine Kochlöffel von dir für ' || coalesce(nullif(m.title, ''), 'das Essen')
+               || ' von ' || koeche || '? Ein paar Tipps in der App, und ' || koeche
+               || case when m.cook2 is null then ' weiß' else ' wissen' end || ' Bescheid. 🥄',
                'kpt-bewerten'::text
           from profiles p
           join rsvps r on r.day = fri and r.user_id = p.id and r.coming

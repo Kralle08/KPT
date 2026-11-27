@@ -44,7 +44,7 @@ Der Einladungscode sorgt dafür, dass trotzdem nur Clubmitglieder hineinkommen.
 
 ## Schritt 6: Mitteilungen einrichten
 
-Die Datenbank prüft jede Minute, ob etwas zu verschicken ist: Mittwoch 15 Uhr die Erinnerung an alle ohne Antwort, Donnerstag 7 Uhr die Portionen an die Köche, Donnerstag 18:05 Uhr den Endstand, Freitag 19 Uhr die Erinnerung zum Bewerten an alle, die mitgegessen und noch nicht bewertet haben, dazu neue Chatnachrichten und (wer will) neue Fotos. Verschickt wird über eine kleine Supabase-Funktion namens `push`.
+Die Datenbank prüft jede Minute, ob etwas zu verschicken ist: Mittwoch 15 Uhr die Erinnerung an alle ohne Antwort, Donnerstag 7 Uhr die Portionen an die Köche, Donnerstag 18:05 Uhr den Endstand, Freitag 18 Uhr die Erinnerung zum Bewerten an alle, die mitgegessen und noch nicht bewertet haben, dazu neue Chatnachrichten und (wer will) neue Fotos. Verschickt wird über eine kleine Supabase-Funktion namens `push`.
 
 1. **Schlüssel erzeugen:** Die Datei `VAPID-PRIVAT.txt` (von Claude) enthält einen öffentlichen und einen privaten Schlüssel. Der öffentliche steht schon in `config.js`.
 2. **Funktion anlegen:** Supabase → **Edge Functions** → **Deploy a new function** → **Via Editor**. Name: `push`. Den gesamten Inhalt von `supabase-funktion/index.ts` einfügen und **Deploy function** klicken.

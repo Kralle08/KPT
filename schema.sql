@@ -666,13 +666,14 @@ begin
          where p.active and p.notify_friday and p.id in (m.cook1, coalesce(m.cook2, m.cook1));
     end if;
 
-    -- Freitag ab 19 Uhr: an alle, die mitgegessen und noch nicht bewertet haben
-    if extract(isodow from n) = 5 and n::time >= time '19:00'
+    -- Freitag ab 18 Uhr: an alle, die mitgegessen und noch nicht bewertet haben
+    if extract(isodow from n) = 5 and n::time >= time '18:00'
        and public.kpt_claim('bewerten:' || fri) then
       return query
-        select p.id, 'KPT: Wie hat es dir geschmeckt?'::text,
-               'Du hast heute ' || coalesce(nullif(m.title, ''), 'das Essen') || ' von ' || koeche
-               || ' noch nicht bewertet. Ein paar Kochlöffel dauern nur Sekunden.',
+        select p.id, 'KPT: Sag mal, hat es dir nicht geschmeckt? 🤔'::text,
+               'Oder warum sehen wir noch keine Kochlöffel von dir für ' || coalesce(nullif(m.title, ''), 'das Essen')
+               || ' von ' || koeche || '? Ein paar Tipps in der App, und ' || koeche
+               || case when m.cook2 is null then ' weiß' else ' wissen' end || ' Bescheid. 🥄',
                'kpt-bewerten'::text
           from profiles p
           join rsvps r on r.day = fri and r.user_id = p.id and r.coming
