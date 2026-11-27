@@ -670,10 +670,10 @@ begin
     if extract(isodow from n) = 5 and n::time >= time '18:00'
        and public.kpt_claim('bewerten:' || fri) then
       return query
-        select p.id, 'KPT: Sag mal, hat es dir nicht geschmeckt? 🤔'::text,
-               'Oder warum sehen wir noch keine Kochlöffel von dir für ' || coalesce(nullif(m.title, ''), 'das Essen')
-               || ' von ' || koeche || '? Ein paar Tipps in der App, und ' || koeche
-               || case when m.cook2 is null then ' weiß' else ' wissen' end || ' Bescheid. 🥄',
+        select p.id, ('KPT: ' || koeche || case when m.cook2 is null then ' schaut' else ' schauen' end
+                      || ' ständig aufs Handy 👀')::text,
+               'Die Küche wartet noch auf deine Kochlöffel für ' || coalesce(nullif(m.title, ''), 'das Essen')
+               || '. Erlös sie, dauert nur Sekunden. 🥄',
                'kpt-bewerten'::text
           from profiles p
           join rsvps r on r.day = fri and r.user_id = p.id and r.coming
